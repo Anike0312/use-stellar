@@ -1854,7 +1854,7 @@ await connect("my-wallet")
 
 Optional members let an adapter do more: `disconnect`, `canAutoConnect` (silent session restore), `resolveNetwork` (network-mismatch detection) and `subscribe` (account and network changes made inside the wallet).
 
-Contributions for new wallet integrations are welcome — see [CONTRIBUTING.md](https://github.com/israelolrunfemi/use-stellar/blob/main/CONTRIBUTING.md).
+Contributions for new wallet integrations are welcome — see [CONTRIBUTING.md](https://github.com/RaceeyXo/use-stellar/blob/main/CONTRIBUTING.md).
 
 ---
 
@@ -1862,10 +1862,10 @@ Contributions for new wallet integrations are welcome — see [CONTRIBUTING.md](
 
 `use-stellar` is open source and welcomes contributions. Every hook is a self-contained TypeScript file — you do not need Rust or blockchain expertise to contribute.
 
-See [CONTRIBUTING.md](https://github.com/israelolrunfemi/use-stellar/blob/main/CONTRIBUTING.md) for setup instructions and a guide to adding new hooks and wallet integrations.
+See [CONTRIBUTING.md](https://github.com/RaceeyXo/use-stellar/blob/main/CONTRIBUTING.md) for setup instructions and a guide to adding new hooks and wallet integrations.
 
 ```bash
-git clone https://github.com/israelolrunfemi/use-stellar
+git clone https://github.com/RaceeyXo/use-stellar
 cd use-stellar
 pnpm install
 pnpm --filter use-stellar build
@@ -1876,4 +1876,4 @@ pnpm --filter @use-stellar/demo dev
 
 ## License
 
-[Apache-2.0](https://github.com/israelolrunfemi/use-stellar/blob/main/LICENSE)
+[Apache-2.0](https://github.com/RaceeyXo/use-stellar/blob/main/LICENSE)

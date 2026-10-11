@@ -5,12 +5,12 @@
   "description": "React hooks for the Stellar network - the wagmi of Stellar",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/israelolrunfemi/use-stellar.git",
+    "url": "git+https://github.com/RaceeyXo/use-stellar.git",
     "directory": "packages/core"
   },
-  "homepage": "https://github.com/israelolrunfemi/use-stellar#readme",
+  "homepage": "https://github.com/RaceeyXo/use-stellar#readme",
   "bugs": {
-    "url": "https://github.com/israelolrunfemi/use-stellar/issues"
+    "url": "https://github.com/RaceeyXo/use-stellar/issues"
   },
   "main": "dist/index.js",
   "module": "dist/index.mjs",
