@@ -1,9 +1,14 @@
 name: Release
 
+# Manual only. Pushing a tag does NOT publish: a release happens when a
+# maintainer starts this workflow by hand (Actions → Release → Run workflow)
+# and picks the version tag under "Use workflow from".
+#
+# The run must be started from a `vX.Y.Z` tag, not a branch — the tag name is
+# the version that gets verified, released and published, so a run started
+# from a branch stops at "Verify release version".
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  workflow_dispatch:
 
 jobs:
   release:

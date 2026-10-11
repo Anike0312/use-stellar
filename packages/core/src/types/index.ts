@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react"
 import type { StellarError } from "../errors"
 import type { QueryStore } from "../cache"
+import type { PlatformCapabilities } from "../runtime"
 import type { xdr } from "@stellar/stellar-sdk"
 
 export type { QueryConfig } from "../cache"
@@ -555,7 +556,14 @@ export interface AutoConnectOptions {
    */
   persistAddress?: boolean
   /** Where to persist. Defaults to `"local"` (`localStorage`). */
-  storage?: "local" | "session"
+  storage?: "local" | "session" | SessionStorageAdapter
+}
+
+/** Storage-compatible adapter for persisting non-secret wallet session metadata. */
+export interface SessionStorageAdapter {
+  getItem(key: string): string | null | Promise<string | null>
+  setItem(key: string, value: string): void | Promise<void>
+  removeItem(key: string): void | Promise<void>
 }
 
 /**
@@ -570,6 +578,8 @@ export interface StellarContextValue {
   autoConnect: Required<AutoConnectOptions>
   /** Shared query/cache store. All fetching hooks read and write through this. */
   queryStore: QueryStore
+  /** Platform capabilities and environment detection. */
+  platform: PlatformCapabilities
 }
 
 export interface UsePaymentsOptions {
@@ -599,6 +609,40 @@ export interface UsePaymentsReturn {
   fetchPrev: () => Promise<void>
   hasNext: boolean
   hasPrev: boolean
+}
+
+/**
+ * Options for `useStreamPayments`.
+ */
+export interface UseStreamPaymentsOptions {
+  /** Defaults to the connected wallet address. */
+  address?: string
+  /** `"now"` streams only future payments; a cursor resumes from that point. Defaults to `"now"`. */
+  cursor?: string | "now"
+  /**
+   * Maximum records held in memory, newest first. Older records are dropped
+   * once the buffer is full — this hook is a live tail, not a history API.
+   * Defaults to 50.
+   */
+  bufferSize?: number
+  /** Set to false to open no connection at all. Defaults to true. */
+  enabled?: boolean
+}
+
+/**
+ * Return value of `useStreamPayments`.
+ */
+export interface UseStreamPaymentsReturn {
+  /** Newest first, bounded by `bufferSize`. */
+  payments: NormalizedPayment[]
+  connected: boolean
+  error: StellarError | null
+  /** Last cursor seen, so a caller can persist and resume across sessions. */
+  cursor: string | null
+  /** Closes the current connection (if any) and opens a fresh one from `cursor`. */
+  reconnect: () => void
+  /** Empties the buffered `payments` list without closing the connection. */
+  clear: () => void
 }
 
 /**

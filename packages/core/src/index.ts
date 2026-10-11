@@ -1,7 +1,28 @@
 // Stellar React SDK - Main entry point
 // ── Provider ───────────────────────────────────────────────────────────────
-export { StellarProvider, WALLET_SESSION_STORAGE_KEY } from "./context/StellarProvider"
+export {
+  StellarProvider,
+  WALLET_SESSION_STORAGE_KEY,
+  useStellarContext,
+} from "./context/StellarProvider"
 export type { StellarProviderProps, QueryConfig } from "./context/StellarProvider"
+
+// ── Runtime (framework-neutral) ────────────────────────────────────────────
+export { createStellarRuntime } from "./runtime/StellarRuntime"
+export type {
+  StellarRuntime,
+  StellarRuntimeOptions,
+  StellarRuntimeSnapshot,
+  StellarRuntimeListener,
+} from "./runtime/StellarRuntime"
+export {
+  readWalletSession,
+  writeWalletSession,
+  clearWalletSession,
+  getWalletSessionStorage,
+  WALLET_SESSION_STORAGE_KEY as WALLET_SESSION_KEY,
+} from "./runtime/walletSession"
+export type { PersistedWalletSession, WalletSessionStorage } from "./runtime/walletSession"
 
 // ── Hooks ──────────────────────────────────────────────────────────────────
 export * from "./hooks/useSorobanWrite"
@@ -28,12 +49,14 @@ export type {
   UseFederationLookupOptions,
   UseFederationLookupReturn,
 } from "./types"
+export { resolveNetworkConfig } from "./runtime/network"
 export { useSorobanContract, ANONYMOUS_SIMULATION_SOURCE } from "./hooks/useSorobanContract"
 export type { UseSorobanContractReturn } from "./hooks/useSorobanContract"
 export { usePaymentPaths } from "./hooks/usePaymentPaths"
 export { useContractEvents } from "./hooks/useContractEvents"
 export { usePathPayment } from "./hooks/usePathPayment"
 export { usePayments } from "./hooks/usePayments"
+export { useStreamPayments } from "./hooks/useStreamPayments"
 export { useTransactionHistory } from "./hooks/useTransactionHistory"
 export { usePaymentHistory } from "./hooks/usePaymentHistory"
 export { useClaimableBalance } from "./hooks/useClaimableBalance"
@@ -66,17 +89,39 @@ export type { CreateAccountOptions, UseCreateAccountReturn } from "./types"
 
 export * from "./hooks/useOrderBook"
 export type { OrderbookEntry, UseOrderbookOptions, UseOrderbookReturn } from "./types"
-export {
-  FREIGHTER_WALLET_TYPE,
-  NETWORK_PASSPHRASES,
+import {
   WalletAdapterError,
-  freighterAdapter,
   getWalletAdapter,
   getWalletAdapters,
   hasWalletAdapter,
   registerWalletAdapter,
-  resolveNetworkFromPassphrase,
 } from "./wallets"
+
+export {
+  WalletAdapterError,
+  getWalletAdapter,
+  getWalletAdapters,
+  hasWalletAdapter,
+  registerWalletAdapter,
+}
+
+import { freighterAdapter } from "./wallets/freighterAdapter"
+import { albedoAdapter } from "./wallets/albedoAdapter"
+import {
+  FREIGHTER_WALLET_TYPE,
+  NETWORK_PASSPHRASES,
+  resolveNetworkFromPassphrase,
+} from "./wallets/constants"
+
+registerWalletAdapter(freighterAdapter, { override: true })
+registerWalletAdapter(albedoAdapter, { override: true })
+
+export {
+  FREIGHTER_WALLET_TYPE,
+  NETWORK_PASSPHRASES,
+  freighterAdapter,
+  resolveNetworkFromPassphrase,
+}
 
 // ── Errors ─────────────────────────────────────────────────────────────────
 export {
@@ -93,6 +138,12 @@ export type { StellarErrorCode, StellarErrorOptions } from "./errors"
 
 // ── Utilities ────────────────────────────────────────────────────────────
 export { DEFAULT_FEE_MULTIPLIER } from "./utils/fees"
+export { createWalletConnectAdapter } from "./wallets/walletConnectAdapter"
+export type { CreateWalletConnectAdapterOptions } from "./wallets/walletConnectAdapter"
+export { focusManager, FocusManager } from "./runtime/focusManager"
+export type { FocusListener, FocusManagerOptions, FocusPlatform } from "./runtime/focusManager"
+export { onlineManager, OnlineManager, offlineError } from "./runtime/onlineManager"
+export type { OnlineListener, OnlineEventSetup } from "./runtime/onlineManager"
 export { NETWORK_CONFIGS, getNetworkPassphrase } from "./types"
 export {
   isBrowser,
@@ -109,6 +160,7 @@ export type {
   NetworkConfig,
   CustomNetworkConfig,
   AutoConnectOptions,
+  SessionStorageAdapter,
   WalletType,
   WalletNetworkId,
   WalletState,
@@ -141,6 +193,8 @@ export type {
   StellarContextValue,
   UsePaymentsOptions,
   UsePaymentsReturn,
+  UseStreamPaymentsOptions,
+  UseStreamPaymentsReturn,
   UseTransactionHistoryOptions,
   UseTransactionHistoryReturn,
   NormalizedTransaction,

@@ -40,6 +40,7 @@ function PayButton() {
 - [Wallet setup & funding](#wallet-setup--funding)
 - [Provider setup](#provider-setup)
 - [Caching](#caching)
+- [Restoring a wallet session](#restoring-a-wallet-session)
 - [Hooks](#hooks)
   - [useWallet](#usewallet)
   - [useBalance](#usebalance)
@@ -68,30 +69,42 @@ Before installing `use-stellar`, make sure your project meets these requirements
 
 | Requirement | Version |
 |---|---|
-| Node.js | 18 or later |
+| Node.js | 20 or later |
 | React | 18 or later |
 | TypeScript (optional) | 5.0 or later |
 
-`use-stellar` also requires the [Freighter browser extension](https://freighter.app) to be installed for wallet connection to work. Freighter is a free Stellar wallet extension available for Chrome and Firefox.
+`react-dom` is an optional peer: it is only needed on the web, so a React Native app does not have to install it.
+
+Read hooks (`useBalance`, `useAccount`, `usePayments`, …) need no wallet at all — pass an `address`. Connecting and signing need a wallet; see [Supported wallets](#supported-wallets).
 
 ---
 
 ## Installation
 
-Install `use-stellar` and its peer dependency using your preferred package manager:
+Install `use-stellar`, plus the SDK of the wallet you want to connect:
 
 ```bash
 # npm
-npm install use-stellar @stellar/stellar-sdk
+npm install use-stellar @stellar/freighter-api
 
 # pnpm
-pnpm add use-stellar @stellar/stellar-sdk
+pnpm add use-stellar @stellar/freighter-api
 
 # yarn
-yarn add use-stellar @stellar/stellar-sdk
+yarn add use-stellar @stellar/freighter-api
 ```
 
-> **Note:** `@stellar/stellar-sdk` is a peer dependency. It must be installed alongside `use-stellar` in your project.
+Wallet SDKs are **optional peer dependencies**, so you only install what you use:
+
+| Wallet | Install |
+|---|---|
+| Freighter | `@stellar/freighter-api` |
+| Albedo | `@albedo-link/intent` |
+| WalletConnect | `@walletconnect/sign-client` |
+
+Connecting to a wallet whose SDK is not installed fails with a `WALLET_NOT_INSTALLED` error that names the package to add — not with a bundler error.
+
+> **Note:** `@stellar/stellar-sdk` is a regular dependency and is installed for you. Add it to your own `package.json` only if you import from it directly (for example to build `Asset` or `xdr` values).
 
 ---
 
@@ -307,6 +320,70 @@ if (error) {
 
 The one exception is a *first* fetch that fails: there is no good data to keep,
 so `data` stays `null` and only `error` is set.
+
+### Rate limits, offline, and background tabs
+
+**Rate limits are retried for you.** A `429` from Horizon is retried up to three
+times, waiting exactly as long as its `Retry-After` header asks. Other failures
+(`404`, `400`, …) are not retried — they would fail the same way again.
+
+**Offline pauses queries instead of failing them.** While the browser reports no
+connection, no request is started and cached data stays on screen; a request cut
+off mid-flight does not replace good data with a network error. When the
+connection returns, stale queries refetch once.
+
+**Write hooks fail fast when offline.** `useSendPayment`, `useAddTrustline` and
+the other signing hooks reject immediately with `NETWORK_ERROR` — before anything
+is built or signed. A signed transaction is never queued for later: replaying one
+after the user has moved on is how a payment goes out twice.
+
+**Polling pauses in a hidden tab.** Hooks with `watch: true` stop polling while
+the page is in the background and catch up when it becomes visible again.
+
+`onlineManager` and `focusManager` are exported if you need to feed these signals
+from your own source (they are what the React Native package plugs into):
+
+```ts
+import { onlineManager, focusManager } from "use-stellar"
+
+onlineManager.isOnline() // false only when the platform says "offline"
+focusManager.setFocused(false) // e.g. from a custom visibility signal
+```
+
+---
+
+## Restoring a wallet session
+
+By default a page reload starts disconnected. Pass `autoConnect` to restore the
+previous session on mount:
+
+```tsx
+<StellarProvider network="testnet" autoConnect>
+  <App />
+</StellarProvider>
+```
+
+It never raises an approval dialog on page load. If the wallet can reconnect
+silently (the site is already approved), `useWallet` comes back connected. If
+reconnecting would prompt, the session is restored as *intent* only —
+`restoredWallet` tells you which wallet to pre-select, and the user clicks:
+
+```tsx
+const { connected, restoredWallet, connect } = useWallet()
+
+if (!connected && restoredWallet) {
+  return <button onClick={() => connect(restoredWallet)}>Reconnect {restoredWallet}</button>
+}
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | Restore the session on mount. `autoConnect` alone is shorthand for `{ enabled: true }`. |
+| `persistAddress` | `false` | Also store the public address, so a UI can show it before the wallet answers. |
+| `storage` | `"local"` | `"local"`, `"session"`, or any object with `getItem` / `setItem` / `removeItem` (sync or async). |
+
+Only the wallet type — and, if you opt in, the public address — is stored.
+Nothing secret is ever persisted; a wallet adapter holds no key material.
 
 ---
 
@@ -1347,13 +1424,113 @@ record?.memo // attach to the payment when present
 record?.memoType
 ```
 
+#### useStreamPayments
+
+Live-tails an account's payments over Horizon's Server-Sent Events, so a UI can
+answer "did the money arrive yet?" within a ledger close instead of polling.
+Reconnects with backoff and resumes from the last payment seen.
+
+```tsx
+const { payments, connected, error, reconnect, clear } = useStreamPayments({
+  address, // defaults to the connected wallet
+  cursor: "now", // only payments from now on; pass a paging token to resume
+  bufferSize: 50, // newest first, capped
+})
+```
+
+#### useCreateAccount
+
+Funds a brand-new account. A plain payment to an address that does not exist
+yet fails; this sends the `createAccount` operation instead.
+
+```tsx
+const { createAccount, loading, error } = useCreateAccount()
+
+const { hash } = await createAccount({ destination, startingBalance: "2" })
+```
+
+#### useFeeStats
+
+Current network fee conditions, for choosing a fee before you submit.
+
+```tsx
+const { baseFee, isSurging, suggested, percentiles } = useFeeStats({ watch: true })
+
+suggested() // a max bid in stroops that should clear under current load
+```
+
+#### useOrderbook
+
+Bids and asks for an asset pair on the Stellar DEX, with the spread and mid
+price computed for you.
+
+```tsx
+const { bids, asks, spread, midPrice } = useOrderbook({
+  selling: "XLM",
+  buying: { code: "USDC", issuer: USDC_ISSUER },
+  watch: true,
+})
+```
+
+#### useOffers
+
+An account's open DEX offers, paginated.
+
+```tsx
+const { offers, hasNext, fetchNext } = useOffers({ address, limit: 10 })
+```
+
+#### useManageOffer
+
+Creates, updates, and cancels DEX offers. Stellar has no "delete offer"
+operation — cancelling is an update to amount `0` — so `cancelOffer` does that
+for you.
+
+```tsx
+const { createOffer, updateOffer, cancelOffer } = useManageOffer()
+
+await createOffer({
+  selling: "XLM",
+  buying: { code: "USDC", issuer: USDC_ISSUER },
+  amount: "100.5",
+  price: "0.25",
+  side: "sell",
+})
+```
+
+#### useSorobanWrite
+
+Invokes a state-changing Soroban contract method: simulates, signs, submits,
+and waits for the result. (`useSorobanContract` is the read-only counterpart.)
+
+```tsx
+const { invoke, loading, error } = useSorobanWrite<number>()
+
+const { hash, result } = await invoke({
+  contractId: "C...",
+  method: "increment",
+  args: [xdr.ScVal.scvU32(1)],
+})
+```
+
+#### useSep10Auth
+
+Authenticates the connected account with an anchor (SEP-10) and returns the
+JWT the anchor's other endpoints expect.
+
+```tsx
+const { authenticate, logout, token, authenticated } = useSep10Auth({
+  homeDomain: "testanchor.stellar.org",
+})
+```
+
 ---
 
 ## Next.js App Router (SSR)
 
-`use-stellar` is a **client library**. Every export calls client-only React APIs (e.g. `createContext`, `useState`) at module scope, so the published bundle is built with a `"use client"` directive emitted at the top of the file. That directive is included for you automatically — you do **not** need to add it yourself. Because the directive marks the package's modules as client modules, the package can only be meaningfully imported from a client boundary: import it from a module that already carries `"use client"`, or from a component that is otherwise client-side (e.g. inside a `"use client"` provider wrapper or an event handler).
+The main entry, `use-stellar`, is a **client library**. Its hooks and provider use client-only React APIs (`createContext`, `useState`), so the published entry begins with a `"use client"` directive. That directive is included for you — you do **not** need to add it yourself — and it means the hooks must be used from a client boundary: a module that carries `"use client"`, or a component rendered inside one.
 
-Importing `use-stellar` directly from a Server Component will not work — the `"use client"` directive makes the library's modules client modules, which is the opposite of server-safe. Render `StellarProvider` or call interactive hooks such as `useWallet` and `useSendPayment` from the client side:
+Render `StellarProvider` and call hooks such as `useWallet` and `useSendPayment` from the client side:
 
 ```tsx
 // app/providers.tsx
@@ -1379,6 +1556,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   );
 }
 ```
+
+### Server Components, route handlers, and non-React code: `use-stellar/core`
+
+Everything that does not need React is also published from a second entry,
+`use-stellar/core`. It imports no React and carries no `"use client"` directive,
+so it can be called from a Server Component, a route handler, a script, or
+another framework.
+
+```tsx
+// app/account/[address]/page.tsx — a Server Component
+import { fetchAccount, getNetworkConfig } from "use-stellar/core"
+
+export default async function AccountPage({ params }: { params: { address: string } }) {
+  const account = await fetchAccount(getNetworkConfig("testnet"), { address: params.address })
+
+  return <pre>{JSON.stringify(account.balances, null, 2)}</pre>
+}
+```
+
+It exposes the same fetchers the hooks use (`fetchAccount`, `fetchAccountExists`,
+`fetchAsset`, `fetchClaimableBalance`, `fetchTransaction`,
+`fetchFederationLookup`), the cache primitives (`QueryStore`,
+`createQueryObserver`), the typed errors, and the address and asset utilities.
+Failures are thrown as the same `StellarError` the hooks report.
 
 ---
 
@@ -1554,6 +1755,22 @@ if (error?.code === "NO_TRUSTLINE") {
 | `RATE_LIMITED` | Horizon rate-limited the request (429) |
 | `VALIDATION_ERROR` | Caller-supplied input was invalid, or the environment was unsupported (e.g. calling a browser-only hook during SSR) |
 | `NETWORK_ERROR` | A transport-level failure — offline, DNS, timeout, CORS |
+| `WALLET_UNSUPPORTED` | No adapter is registered for the wallet type, or the wallet is not supported yet |
+| `SIGNING_FAILED` | The wallet could not sign the transaction |
+| `DESTINATION_NOT_FOUND` | The destination account does not exist; create and fund it first (see `useCreateAccount`) |
+| `MEMO_REQUIRED` | The destination account requires a memo |
+| `INVALID_MEMO` | The memo's type, length or format is invalid |
+| `TRUSTLINE_LIMIT_EXCEEDED` | The recipient has reached their trust limit for the asset |
+| `LOW_RESERVE` | Not enough XLM reserve to add another offer or trustline |
+| `SEQUENCE_MISMATCH` | The transaction's sequence number was out of date; rebuild and retry |
+| `FEE_TOO_LOW` | The fee was too low for current network load; retry with a higher fee |
+| `TX_TIMEOUT` | Horizon timed out before confirming inclusion. The transaction **may still have succeeded** — poll its hash with `useTransaction` rather than resubmitting |
+| `ASSET_NOT_FOUND` | The requested asset does not exist on the ledger |
+| `ALREADY_FUNDED` | Friendbot was asked to fund an account that already exists |
+| `SIMULATION_FAILED` | A Soroban transaction could not be simulated |
+| `RESTORE_PREAMBLE_REQUIRED` | Contract state is archived; submit a RestoreFootprint transaction first |
+| `LEDGER_OUT_OF_RETENTION` | The requested start ledger is older than the RPC server retains |
+| `SEP10_VALIDATION_FAILED` | An anchor's SEP-10 challenge was malformed or failed validation |
 | `UNKNOWN` | Anything that couldn't be confidently classified |
 
 ### Advanced: normalizing errors yourself
@@ -1583,12 +1800,61 @@ isStellarError(err);                                      // type guard
 
 | Wallet | Status | Notes |
 |---|---|---|
-| [Freighter](https://freighter.app) | ✅ Supported | Default wallet, fully wired |
-| Albedo | 🚧 In progress | Adapter is implemented (`@albedo-link/intent`) but not yet wired into the wallet registry — `connect("albedo")` currently throws. Contributions to finish the integration welcome. |
-| LOBSTR | Planned | Not yet implemented |
-| Rabet | Planned | Not yet implemented |
+| [Freighter](https://freighter.app) | ✅ Supported | The default: `connect()`. Needs `@stellar/freighter-api` and the browser extension. |
+| [Albedo](https://albedo.link) | ✅ Supported | `connect("albedo")`. Needs `@albedo-link/intent`. Web-based, no extension. |
+| WalletConnect | ✅ Supported (opt-in) | Register the adapter first — see below. Needs `@walletconnect/sign-client`. |
+| LOBSTR | Planned | `connect("lobstr")` fails with `WALLET_UNSUPPORTED` |
+| Rabet | Planned | `connect("rabet")` fails with `WALLET_UNSUPPORTED` |
 
-Contributions for new wallet integrations are welcome — see [CONTRIBUTING.md](https://github.com/israelolrunfemi/use-stellar/blob/main/CONTRIBUTING.md).
+### WalletConnect
+
+WalletConnect needs a project ID from [WalletConnect Cloud](https://cloud.walletconnect.com) and somewhere to show the pairing URI, so it is created and registered by your app rather than built in:
+
+```tsx
+import { createWalletConnectAdapter, registerWalletAdapter, useWallet } from "use-stellar"
+
+registerWalletAdapter(
+  createWalletConnectAdapter({
+    projectId: "YOUR_PROJECT_ID",
+    metadata: {
+      name: "My app",
+      description: "What my app does",
+      url: "https://myapp.example",
+      icons: ["https://myapp.example/icon.png"],
+    },
+    onDisplayUri: uri => showQrCode(uri), // render it as a QR code or deep link
+  })
+)
+
+// then, anywhere under <StellarProvider>:
+const { connect } = useWallet()
+await connect("walletconnect")
+```
+
+An approved session is reused on the next `connect()` rather than paired again, so it works with [`autoConnect`](#restoring-a-wallet-session). `disconnect()` closes the session with the wallet, and a session ended from the wallet side disconnects the app.
+
+### Bringing your own wallet
+
+Any wallet can be plugged in without a change to this package. Implement the `WalletAdapter` contract and register it under your own type:
+
+```ts
+import { registerWalletAdapter, type WalletAdapter } from "use-stellar"
+
+const myWallet: WalletAdapter = {
+  metadata: { type: "my-wallet", name: "My Wallet", supported: true },
+  isAvailable: async () => true,
+  connect: async network => ({ address, wallet: "my-wallet", network, networkPassphrase }),
+  getNetworkDetails: async network => ({ network, networkPassphrase }),
+  signTransaction: async (xdr, { networkPassphrase }) => signedXdr,
+}
+
+registerWalletAdapter(myWallet)
+await connect("my-wallet")
+```
+
+Optional members let an adapter do more: `disconnect`, `canAutoConnect` (silent session restore), `resolveNetwork` (network-mismatch detection) and `subscribe` (account and network changes made inside the wallet).
+
+Contributions for new wallet integrations are welcome — see [CONTRIBUTING.md](https://github.com/RaceeyXo/use-stellar/blob/main/CONTRIBUTING.md).
 
 ---
 
@@ -1596,10 +1862,10 @@ Contributions for new wallet integrations are welcome — see [CONTRIBUTING.md](
 
 `use-stellar` is open source and welcomes contributions. Every hook is a self-contained TypeScript file — you do not need Rust or blockchain expertise to contribute.
 
-See [CONTRIBUTING.md](https://github.com/israelolrunfemi/use-stellar/blob/main/CONTRIBUTING.md) for setup instructions and a guide to adding new hooks and wallet integrations.
+See [CONTRIBUTING.md](https://github.com/RaceeyXo/use-stellar/blob/main/CONTRIBUTING.md) for setup instructions and a guide to adding new hooks and wallet integrations.
 
 ```bash
-git clone https://github.com/israelolrunfemi/use-stellar
+git clone https://github.com/RaceeyXo/use-stellar
 cd use-stellar
 pnpm install
 pnpm --filter use-stellar build
@@ -1610,4 +1876,4 @@ pnpm --filter @use-stellar/demo dev
 
 ## License
 
-[Apache-2.0](https://github.com/israelolrunfemi/use-stellar/blob/main/LICENSE)
+[Apache-2.0](https://github.com/RaceeyXo/use-stellar/blob/main/LICENSE)

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { CacheEntry } from "./types"
-import { DEFAULT_STALE_TIME } from "./types"
 import type { QueryStore } from "./store"
 import { serializeKey } from "./keys"
-import { retryWithBackoff, getRetryAfterMs } from "../utils/retryWithBackoff"
+import {
+  createQueryObserver,
+  peekQuerySnapshot,
+  type QueryObserver,
+  type QueryObserverSnapshot,
+} from "./observer"
 
 /**
  * Options for `useQuery`.
@@ -59,18 +62,11 @@ export interface UseQueryResult<T> {
 /**
  * The core caching primitive consumed by every read hook.
  *
- * Behaviour:
- * - On mount: subscribe to the store and run the query unless the cached data
- *   is still within `staleTime`.
- * - While a fetch is in flight for the same key: await the existing promise
- *   (deduplication — no second network request).
- * - On success/error: write the result to the store; all subscribers re-render.
- * - On unmount: unsubscribe; if subscriber count drops to zero the GC timer
- *   starts.
- * - On 429: honour `Retry-After`, retry up to `maxRetries` times with
- *   exponential back-off. While retrying, the hook does not surface a loading
- *   state for new renders — the stale data is served until a success or final
- *   failure.
+ * A thin React adapter over the framework-neutral {@link createQueryObserver}:
+ * React's only responsibility here is projecting the observer's snapshot into
+ * component state so the reconciler knows when to re-render. All
+ * orchestration — in-flight dedup, staleTime freshness, forced refetch, and
+ * store writes — lives in the observer.
  */
 export function useQuery<T>({
   queryKey,
@@ -80,143 +76,75 @@ export function useQuery<T>({
   enabled = true,
   maxRetries = 3,
 }: UseQueryOptions<T>): UseQueryResult<T> {
-  // ── Local state mirrors the store entry ──────────────────────────────────
-  // We keep a local copy so React's reconciler knows when to re-render this
-  // specific hook instance. The store itself is the source of truth; this is
-  // just the projection.
-  const snapshot = store.getSnapshot<T>(queryKey)
-  const [localState, setLocalState] = useState<{
-    data: T | null
-    loading: boolean
-    error: unknown
-    updatedAt: number | null
-  }>(() => ({
-    data: snapshot?.data ?? null,
-    loading: snapshot?.loading ?? false,
-    error: snapshot?.error ?? null,
-    updatedAt: snapshot?.updatedAt ?? null,
-  }))
-
-  /**
-   * rateLimitedUntilRef tracks when the most recent 429 retry window closes.
-   * Stored as a ref (not state) so polling hooks can read it imperatively
-   * without triggering re-renders and without act() issues in tests.
-   */
-  const rateLimitedUntilRef = useRef<number | null>(null)
-
-  // Stable ref to the latest queryFn so the fetch closure always calls the
-  // current version without needing it in the dependency array.
-  const queryFnRef = useRef(queryFn)
-  queryFnRef.current = queryFn
-
-  // Stable ref to staleTime so the fetch closure can read the latest value.
-  const staleTimeRef = useRef(staleTime ?? DEFAULT_STALE_TIME)
-  staleTimeRef.current = staleTime ?? DEFAULT_STALE_TIME
-
-  // Stable ref to maxRetries.
-  const maxRetriesRef = useRef(maxRetries)
-  maxRetriesRef.current = maxRetries
-
-  // Key serialised as a string for stable comparisons inside effects.
   const keyStr = serializeKey(queryKey)
 
-  // ── Fetch function ────────────────────────────────────────────────────────
-  const fetch = useCallback(
-    async (forceRefetch = false) => {
-      if (!enabled) return
+  // The latest render's options, read by the effects below without making
+  // them re-run for a new `queryFn` identity.
+  const optionsRef = useRef({ queryKey, queryFn, staleTime, enabled, maxRetries })
+  optionsRef.current = { queryKey, queryFn, staleTime, enabled, maxRetries }
 
-      // Deduplication: if a fetch for this key is already running, await it
-      // and use its result — no second network request.
-      const inflight = store.getInflightPromise<T>(queryKey)
-      if (inflight && !forceRefetch) {
-        try {
-          await inflight
-        } catch {
-          // The error was already stored by whoever started the fetch.
-        }
-        return
-      }
+  const observerRef = useRef<QueryObserver<T> | null>(null)
 
-      // Freshness: skip the request if data is within staleTime.
-      if (!forceRefetch && store.isFresh(queryKey, staleTimeRef.current)) {
-        return
-      }
-
-      const promise = retryWithBackoff(() => queryFnRef.current(), {
-        maxRetries: maxRetriesRef.current,
-      })
-
-      // Register in store before awaiting so concurrent subscribers see the
-      // promise immediately.
-      store.setLoading(queryKey, promise)
-
-      try {
-        const data = await promise
-        // Clear the rate-limit window on success.
-        rateLimitedUntilRef.current = null
-        store.setData(queryKey, data)
-      } catch (err) {
-        // Surface rate-limit window to polling hooks via ref (no re-render needed).
-        const retryMs = getRetryAfterMs(err)
-        if (retryMs !== null) {
-          rateLimitedUntilRef.current = Date.now() + retryMs
-        } else {
-          rateLimitedUntilRef.current = null
-        }
-        store.setError(queryKey, err)
-      }
-    },
-    // eslint-disable-next-line
-    [keyStr, store, enabled]
+  // Render stays pure: the observer subscribes to the store and starts a
+  // request as soon as it is constructed, so it is created in an effect, not
+  // here. Until then, report what it is about to report.
+  const [snapshot, setSnapshot] = useState<QueryObserverSnapshot<T>>(() =>
+    peekQuerySnapshot<T>({ queryKey, queryFn, store, staleTime, enabled, maxRetries })
   )
 
-  // ── Subscription ──────────────────────────────────────────────────────────
+  // rateLimitedUntilRef mirrors the observer's rate-limit window. Stored as a
+  // ref (not state) so polling hooks can read it imperatively without
+  // triggering re-renders and without act() issues in tests.
+  const rateLimitedUntilRef = useRef<number | null>(null)
+
+  // The observer lives exactly as long as this effect: created and subscribed
+  // on mount, destroyed on unmount. A destroyed observer is never reused, so
+  // StrictMode's mount → unmount → mount gets a fresh one the second time
+  // (which joins the first one's in-flight request through the store).
   useEffect(() => {
-    if (!enabled) {
-      // Disabled — typically the address was cleared while a fetch was still in
-      // flight. Project this key's snapshot so the previous query's `loading`
-      // cannot stick: nothing will ever arrive to clear it, because the
-      // subscription below is never set up.
-      const current = store.getSnapshot<T>(queryKey)
-      setLocalState({
-        data: current?.data ?? null,
-        loading: false,
-        error: current?.error ?? null,
-        updatedAt: current?.updatedAt ?? null,
-      })
-      return
+    const observer = createQueryObserver<T>({ ...optionsRef.current, store })
+    observerRef.current = observer
+
+    const sync = (next: QueryObserverSnapshot<T>) => {
+      setSnapshot(next)
+      rateLimitedUntilRef.current = observer.getRateLimitedUntil()
     }
-
-    // The listener is called synchronously by the store whenever the entry
-    // changes, updating local state so this hook instance re-renders.
-    const unsubscribe = store.subscribe<T>(queryKey, (entry: CacheEntry<T>) => {
-      setLocalState({
-        data: entry.data,
-        loading: entry.loading,
-        error: entry.error,
-        updatedAt: entry.updatedAt,
-      })
-    })
-
-    // Initial fetch (skipped when data is still fresh).
-    void fetch(false)
+    const unsubscribe = observer.subscribe(sync)
+    sync(observer.getSnapshot())
 
     return () => {
       unsubscribe()
+      observer.destroy()
+      if (observerRef.current === observer) observerRef.current = null
     }
-    // eslint-disable-next-line
-  }, [keyStr, store, enabled, fetch])
+  }, [store])
 
-  // ── Imperative refetch ────────────────────────────────────────────────────
+  // Hand the observer every render's options, so it always calls the current
+  // `queryFn` (which may close over values that are not part of the key) with
+  // the current `staleTime` / `maxRetries`. Key and enabled changes are
+  // applied here too — atomically, via the observer's own setOptions.
+  useEffect(() => {
+    observerRef.current?.setOptions(optionsRef.current)
+  })
+
+  // A key or enabled switch may not produce a store notification (fresh cached
+  // data, or disabled), so project the observer's snapshot explicitly.
+  useEffect(() => {
+    const observer = observerRef.current
+    if (!observer) return
+    setSnapshot(observer.getSnapshot())
+    rateLimitedUntilRef.current = observer.getRateLimitedUntil()
+  }, [keyStr, store, enabled])
+
   const refetch = useCallback(() => {
-    void fetch(true)
-  }, [fetch])
+    void observerRef.current?.fetch({ force: true })
+  }, [])
 
   return {
-    data: localState.data,
-    loading: localState.loading,
-    error: localState.error,
-    updatedAt: localState.updatedAt,
+    data: snapshot.data,
+    loading: snapshot.loading,
+    error: snapshot.error,
+    updatedAt: snapshot.updatedAt,
     rateLimitedUntilRef,
     refetch,
   }

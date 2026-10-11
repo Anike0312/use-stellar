@@ -5,11 +5,11 @@ blank_issues_enabled: false
 
 contact_links:
   - name: 📖 Documentation template reference
-    url: https://github.com/israelolrunfemi/use-stellar/blob/main/docs/example.md
+    url: https://github.com/RaceeyXo/use-stellar/blob/main/docs/example.md
     about: "Before writing any docs, read docs/example.md — the canonical format every hook page must follow."
   - name: 📦 use-stellar on npm
     url: https://www.npmjs.com/package/use-stellar
     about: "The npm page is the primary API reference. Confirm hook signatures here before documenting them."
   - name: 💬 Ask a question
-    url: https://github.com/israelolrunfemi/use-stellar/discussions
+    url: https://github.com/RaceeyXo/use-stellar/discussions
     about: "Have a question rather than a task? Open a discussion instead of an issue."

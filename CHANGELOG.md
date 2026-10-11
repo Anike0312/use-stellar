@@ -3,7 +3,17 @@
 All notable changes to use-stellar will be documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.2.0] — Unreleased
+## [0.2.1] — 2026-10-11
+
+First published release of the 0.2 line — `0.2.0` was tagged but never reached
+npm. Everything listed under 0.2.0 below ships in this version.
+
+### Changed
+
+- The package's `repository`, `homepage` and `bugs` URLs, and the README links,
+  now point at `RaceeyXo/use-stellar`, the repository releases are built from.
+
+## [0.2.0] — 2026-10-11
 
 ### Breaking
 
@@ -19,6 +29,105 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Removed the never-imported `@lobstrco/signer-extension-api` dependency.
 - Removed the (private, non-shipping) root package's runtime dependency on
   `@albedo-link/intent`.
+- Node.js 20 is now the minimum supported version (`engines.node`).
+
+### Added
+
+- **`use-stellar/core`** — a React-free entry exposing the query fetchers
+  (`fetchAccount`, `fetchAccountExists`, `fetchAsset`, `fetchClaimableBalance`,
+  `fetchTransaction`, `fetchFederationLookup`), the cache primitives
+  (`QueryStore`, `createQueryObserver`), typed errors and utilities. Callable
+  from Server Components, route handlers, scripts and other frameworks.
+- **Pluggable wallets** — `registerWalletAdapter`, `getWalletAdapter`,
+  `getWalletAdapters`, `hasWalletAdapter` and the `WalletAdapter` contract, so
+  an app or wallet vendor can add a wallet without a change to this package.
+- **Albedo** is wired into the registry: `connect("albedo")`.
+- **WalletConnect** — `createWalletConnectAdapter`, with
+  `@walletconnect/sign-client` as an optional peer dependency.
+- **Session restore** — the `autoConnect` provider prop and
+  `useWallet().restoredWallet`. Reconnects silently when the wallet allows it
+  and never raises an approval dialog on page load.
+- **Wallet change events** — account and network switches made inside the
+  wallet update `useWallet` with no user action.
+- `useStreamPayments` — live payments over Horizon Server-Sent Events, with
+  reconnect and cursor resume.
+- `useContractEvents` — poll Soroban contract events with cursor-based
+  pagination, topic filters, a bounded buffer, and a distinct
+  `LEDGER_OUT_OF_RETENTION` error when a start ledger predates the RPC's
+  retention window.
+- `useFederationLookup`, `useAnchor`, `useSep10Auth`, `useCreateAccount`,
+  `useFeeStats`, `useOrderbook`, `useOffers`, `useManageOffer`, `useTrades`,
+  `usePaymentHistory`, `useTransactionHistory`, `usePaymentPaths`,
+  `usePathPayment`, `useAddTrustline`, `useAccountExists`, `useSorobanWrite`.
+- **Offline handling** — `onlineManager`. Queries pause while offline and keep
+  cached data on screen; stale queries refetch once on reconnect. Write hooks
+  fail fast with `NETWORK_ERROR` before anything is built or signed.
+- **Focus handling** — `focusManager`. Polling pauses in a hidden tab.
+- Custom network passphrase support — `StellarNetwork` now includes
+  `"futurenet"` and `"custom"`, `NetworkConfig` carries `networkPassphrase`, and
+  `CustomNetworkConfig` accepts one. `NETWORK_PASSPHRASES` and
+  `getNetworkPassphrase()` are exported.
+- Custom Horizon URLs are honored by every Horizon hook, including local HTTP
+  nodes.
+- Fee strategy — `fee` and `feeMultiplier` options on `useSendPayment`,
+  `useAddTrustline`, and `usePathPayment`, with `DEFAULT_FEE_MULTIPLIER`
+  exported.
+- Typed wallet adapter, payment, asset, trustline, and Soroban simulation error
+  codes, including `DESTINATION_NOT_FOUND`, `SEQUENCE_MISMATCH`, `FEE_TOO_LOW`,
+  `MEMO_REQUIRED`, `TX_TIMEOUT` and `LEDGER_OUT_OF_RETENTION`.
+- A `react-native` export condition, and `react-dom` is now an optional peer,
+  so the package can be consumed from React Native.
+- TypeScript projects on the legacy `moduleResolution: "node"` setting can now
+  resolve `use-stellar/core` (via `typesVersions`).
+
+### Fixed
+
+- **Freighter and Albedo were missing from production webpack / Next.js
+  builds.** The package was marked side-effect free while the built-in wallets
+  are registered by the entry module, so bundlers dropped the registration and
+  `connect()` failed with `Unknown wallet type "freighter"` — in production
+  builds only. The entry files are now declared as having side effects.
+- **`connect` changed identity on every wallet state update**, so an effect
+  depending on it (`useEffect(() => { connect() }, [connect])`) re-fired after
+  every connection and prompted the wallet in a loop.
+- **Read hooks never resolved under `<React.StrictMode>`.** The query observer
+  was created during render and could not be revived after StrictMode's
+  simulated unmount, leaving hooks at `loading: true` and leaking a store
+  subscription. The observer now lives in an effect; render is pure, so a
+  server render no longer starts Horizon requests either.
+- **Rate-limit retries were silently disabled** for `useAccount`, `useAsset`,
+  `usePayments`, `useTransactionHistory`, `useTrades`, `useTransaction` and
+  `usePaymentPaths`: a normalized 429 no longer carried its status, so it was
+  never retried and `maxRetries` did nothing.
+- A read hook kept calling a stale `queryFn` when an input that is not part of
+  its cache key changed (for example `useTransaction`'s `watch`).
+- After going offline with every query unmounted, the app stayed "offline"
+  forever: queries never fetched and write hooks kept rejecting.
+- `useStreamPayments` opened a second stream on every reconnect without closing
+  the first, delivering each payment once per stream. It also kept the previous
+  account's payments and cursor after the address or network changed.
+- **The published files had no `"use client"` directive** (the bundler stripped
+  it), so App Router consumers had to add their own boundary. It is now emitted
+  on the React entries — and deliberately not on `use-stellar/core`.
+- WalletConnect: an approved session is reused instead of pairing again on
+  every `connect()`; signing uses the session that approved the account rather
+  than the newest one; `disconnect()` closes the session; a session ended from
+  the wallet disconnects the app; a failed client initialisation is no longer
+  cached until reload.
+- `sendPayment` rejected in React Native with "only available in the browser"
+  even though the hook's own guard had allowed it.
+- The `react-native` entry was missing `useStreamPayments`,
+  `createStellarRuntime`, `resolveNetworkConfig` and the wallet-session helpers.
+- `usePayments` now extracts real transfers from Soroban `invoke_host_function`
+  operations instead of returning blank 0 XLM rows, reports the actual merged
+  amount for `account_merge` operations, and filters out unhandled operation
+  types instead of returning fabricated zero-amount rows.
+- Wallet network mismatch detection now compares provider intent with the
+  network reported by every adapter.
+
+### Changed
+
+- The bundle-size budget for the main entry is 26 kB (was 25 kB).
 
 ## [0.1.5]
 
@@ -51,22 +160,3 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - useAsset hook
 - useSorobanContract hook (read-only)
 - StellarProvider context
-
-## [Unreleased]
-
-### Fixed
-- `usePayments` now extracts real transfers from Soroban `invoke_host_function` operations instead of returning blank 0 XLM rows.
-- `usePayments` reports the actual merged amount for `account_merge` operations by reading operation effects.
-- Unhandled payment operation types are filtered out instead of being returned as fabricated zero-amount rows.
-
-### Added
-
-- Typed wallet adapter, payment, asset, trustline, and Soroban simulation error codes.
-- Wallet network mismatch detection now compares provider intent with the network reported by every adapter.
-- Custom Horizon URLs are honored by Horizon hooks, including local HTTP nodes.
-- `useContractEvents` hook — poll Soroban contract events with cursor-based pagination, topic filters, a bounded buffer, and a distinct `LEDGER_OUT_OF_RELENTION` error when a start ledger predates the RPC's retention window-
-- Custom network passphrase support — `StellarNetwork` now includes `"futurenet"` and `"custom"`, `NetworkConfig` carries `networkPassphrase`, and `CustomNetworkConfig` accepts one
-- `NETWORK_PASSPHRASES` and `getNetworkPassphrase()` exported for reading a network's passphrase
-- Fee strategy — `fee` and `feeMultiplier` options on `useSendPayment`, `useAddTrustline`, and `usePathPayment`, with `DEFAULT_FEE_MULTIPLIER` exported
-- New error codes: `DESTINATION_NOT_FOUND`, `SEQUENCE_MISMATCH , `FEE_TOO_LOW`, `LEDGER_OUT_OF_RELENTION`
-- Recorded Horizon error fixtures under `src/__tests__/fixtures/` for classification tests

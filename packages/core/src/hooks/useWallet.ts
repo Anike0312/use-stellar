@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef } from "react"
-import { useStellarContext, WALLET_SESSION_STORAGE_KEY } from "../context/StellarProvider"
-import { isBrowser } from "../utils"
-import type { AutoConnectOptions, StellarNetwork, WalletState, WalletType } from "../types"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useStellarContext } from "../context/StellarProvider"
+import type { StellarNetwork, WalletState, WalletType } from "../types"
 import { createStellarError, toStellarError } from "../errors"
-import { getWalletAdapter, hasWalletAdapter } from "../wallets"
+import { getWalletAdapter } from "../wallets"
+import { readWalletSession, writeWalletSession } from "../runtime/walletSession"
 import type { WalletAdapter, WalletChange } from "../wallets"
 
 export interface UseWalletReturn extends WalletState {
@@ -19,68 +19,16 @@ export interface UseWalletReturn extends WalletState {
   restoredWallet: WalletType | null
 }
 
-/** The shape persisted to storage. Nothing here is secret. */
-interface PersistedSession {
-  wallet: string
-  address?: string
-}
-
-function getStorage(kind: AutoConnectOptions["storage"]): Storage | null {
-  if (!isBrowser()) return null
-
-  try {
-    // Accessing `localStorage` itself throws in sandboxed iframes and some
-    // private-mode contexts — not just reading from it.
-    return kind === "session" ? window.sessionStorage : window.localStorage
-  } catch {
-    return null
-  }
-}
-
-/**
- * Reads the persisted session, discarding anything that is not a well-formed
- * record naming a wallet that is actually registered.
- *
- * A stored value is attacker-influenced input in an XSS scenario, so it is
- * validated before it ever reaches the registry.
- */
-function readSession(kind: AutoConnectOptions["storage"]): PersistedSession | null {
-  const storage = getStorage(kind)
-  if (!storage) return null
-
-  try {
-    const raw = storage.getItem(WALLET_SESSION_STORAGE_KEY)
-    if (!raw) return null
-
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed !== "object" || parsed === null) return null
-
-    const { wallet, address } = parsed as Record<string, unknown>
-    if (typeof wallet !== "string" || !hasWalletAdapter(wallet)) return null
-
-    return {
-      wallet,
-      address: typeof address === "string" ? address : undefined,
-    }
-  } catch {
-    return null
-  }
-}
-
-function writeSession(kind: AutoConnectOptions["storage"], session: PersistedSession | null): void {
-  const storage = getStorage(kind)
-  if (!storage) return
-
-  try {
-    if (session) {
-      storage.setItem(WALLET_SESSION_STORAGE_KEY, JSON.stringify(session))
-    } else {
-      storage.removeItem(WALLET_SESSION_STORAGE_KEY)
-    }
-  } catch {
-    // Quota exceeded, or storage disabled mid-session. Losing the ability to
-    // restore a session is never a reason to break the app.
-  }
+const DISCONNECTED_WALLET: WalletState = {
+  connected: false,
+  connecting: false,
+  address: null,
+  network: null,
+  wallet: null,
+  walletName: null,
+  error: null,
+  walletNetwork: null,
+  walletNetworkPassphrase: null,
 }
 
 async function resolveWalletNetwork(
@@ -112,12 +60,12 @@ async function resolveWalletNetwork(
  * await connect("freighter")
  */
 export function useWallet(): UseWalletReturn {
-  const { wallet, setWallet, network, autoConnect } = useStellarContext()
+  const { wallet, setWallet, network, autoConnect, platform } = useStellarContext()
 
   // Tracks whether this hook is still mounted, so a late wallet response or a
   // watcher tick can never call setWallet on an unmounted component.
   const mountedRef = useRef(true)
-  const restoredWalletRef = useRef<WalletType | null>(null)
+  const [restoredWallet, setRestoredWallet] = useState<WalletType | null>(null)
 
   const safeSetWallet = useCallback(
     (update: React.SetStateAction<WalletState>) => {
@@ -136,15 +84,25 @@ export function useWallet(): UseWalletReturn {
 
   const connect = useCallback(
     async (walletType: WalletType = "freighter") => {
-      if (!isBrowser()) {
-        safeSetWallet(prev => ({
-          ...prev,
-          error: createStellarError(
-            "VALIDATION_ERROR",
-            "Wallet connection is only available in the browser. " +
-              'Move your component to a "use client" boundary in Next.js / Remix.'
-          ),
-        }))
+      if (!platform.canConnectWallet) {
+        if (platform.isServer) {
+          safeSetWallet(prev => ({
+            ...prev,
+            error: createStellarError(
+              "VALIDATION_ERROR",
+              "Wallet connection is only available in the browser. " +
+                'Move your component to a "use client" boundary in Next.js / Remix.'
+            ),
+          }))
+        } else {
+          safeSetWallet(prev => ({
+            ...prev,
+            error: createStellarError(
+              "VALIDATION_ERROR",
+              `Wallet connection is not available on platform: ${platform.kind}`
+            ),
+          }))
+        }
         return
       }
 
@@ -169,10 +127,10 @@ export function useWallet(): UseWalletReturn {
           ...walletNetwork,
         })
 
-        restoredWalletRef.current = null
+        setRestoredWallet(null)
 
         if (autoConnect.enabled) {
-          writeSession(autoConnect.storage, {
+          void writeWalletSession(autoConnect.storage, {
             wallet: String(connection.wallet),
             ...(autoConnect.persistAddress ? { address: connection.address } : {}),
           })
@@ -185,7 +143,14 @@ export function useWallet(): UseWalletReturn {
         }))
       }
     },
-    [safeSetWallet, network, autoConnect.enabled, autoConnect.persistAddress, autoConnect.storage]
+    [
+      safeSetWallet,
+      network,
+      autoConnect.enabled,
+      autoConnect.persistAddress,
+      autoConnect.storage,
+      platform,
+    ]
   )
 
   const disconnect = useCallback(() => {
@@ -198,20 +163,10 @@ export function useWallet(): UseWalletReturn {
       }
     }
 
-    restoredWalletRef.current = null
-    writeSession(autoConnect.storage, null)
+    setRestoredWallet(null)
+    void writeWalletSession(autoConnect.storage, null)
 
-    safeSetWallet({
-      connected: false,
-      connecting: false,
-      address: null,
-      network: null,
-      wallet: null,
-      walletName: null,
-      error: null,
-      walletNetwork: null,
-      walletNetworkPassphrase: null,
-    })
+    safeSetWallet(DISCONNECTED_WALLET)
   }, [safeSetWallet, wallet.wallet, autoConnect.storage])
 
   const refreshWalletNetwork = useCallback(async () => {
@@ -241,15 +196,15 @@ export function useWallet(): UseWalletReturn {
   // Runs once per mount. Reconnects only when the wallet says it can do so
   // without a prompt; otherwise restores intent only.
   useEffect(() => {
-    if (!autoConnect.enabled || !isBrowser()) return
-
-    const session = readSession(autoConnect.storage)
-    if (!session) return
+    if (!autoConnect.enabled) return
 
     let cancelled = false
 
     void (async () => {
       try {
+        const session = await readWalletSession(autoConnect.storage)
+        if (!session || cancelled || !mountedRef.current) return
+
         const adapter = getWalletAdapter(session.wallet)
 
         const available = await adapter.isAvailable()
@@ -258,7 +213,7 @@ export function useWallet(): UseWalletReturn {
         if (!available) {
           // The extension is gone. Keep the stored intent so the user can
           // reinstall and pick up where they left off.
-          restoredWalletRef.current = session.wallet
+          setRestoredWallet(session.wallet)
           return
         }
 
@@ -266,7 +221,7 @@ export function useWallet(): UseWalletReturn {
         if (cancelled || !mountedRef.current) return
 
         if (!silent) {
-          restoredWalletRef.current = session.wallet
+          setRestoredWallet(session.wallet)
           safeSetWallet(prev => ({
             ...prev,
             wallet: session.wallet,
@@ -280,7 +235,7 @@ export function useWallet(): UseWalletReturn {
       } catch {
         // A wallet that cannot be restored is not an error the user caused —
         // they simply start from a disconnected UI.
-        writeSession(autoConnect.storage, null)
+        void writeWalletSession(autoConnect.storage, null)
       }
     })()
 
@@ -297,7 +252,9 @@ export function useWallet(): UseWalletReturn {
   // Subscribes through the adapter contract. Adapters that cannot report
   // changes omit `subscribe`, so nothing here branches on wallet type.
   useEffect(() => {
-    if (!wallet.connected || !wallet.wallet || !isBrowser()) return
+    // Gated on "not a server render" rather than on having a DOM: a native app
+    // has no DOM, but its WalletConnect sessions still report changes.
+    if (!wallet.connected || !wallet.wallet || platform.isServer) return
 
     let adapter: WalletAdapter
     try {
@@ -310,6 +267,15 @@ export function useWallet(): UseWalletReturn {
 
     const handleChange = (change: WalletChange) => {
       if (!mountedRef.current) return
+
+      if (change.disconnected) {
+        // The wallet ended the session; mirror `disconnect()` without calling
+        // back into the adapter, which has nothing left to close.
+        setRestoredWallet(null)
+        void writeWalletSession(autoConnect.storage, null)
+        safeSetWallet(DISCONNECTED_WALLET)
+        return
+      }
 
       safeSetWallet(prev => {
         if (!prev.connected) return prev
@@ -328,7 +294,7 @@ export function useWallet(): UseWalletReturn {
     return () => {
       unsubscribe()
     }
-  }, [wallet.connected, wallet.wallet, safeSetWallet])
+  }, [wallet.connected, wallet.wallet, safeSetWallet, platform.isServer, autoConnect.storage])
 
   const isNetworkMismatch = useMemo(() => {
     if (!wallet.connected || !wallet.walletNetwork) return false
@@ -341,6 +307,6 @@ export function useWallet(): UseWalletReturn {
     disconnect,
     refreshWalletNetwork,
     isNetworkMismatch,
-    restoredWallet: restoredWalletRef.current,
+    restoredWallet,
   }
 }
