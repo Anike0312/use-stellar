@@ -3,6 +3,16 @@
 All notable changes to use-stellar will be documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.1] — 2026-10-11
+
+First published release of the 0.2 line — `0.2.0` was tagged but never reached
+npm. Everything listed under 0.2.0 below ships in this version.
+
+### Changed
+
+- The package's `repository`, `homepage` and `bugs` URLs, and the README links,
+  now point at `RaceeyXo/use-stellar`, the repository releases are built from.
+
 ## [0.2.0] — 2026-10-11
 
 ### Breaking
