@@ -220,7 +220,7 @@ docs: add useSendPayment example to README
 
 ## Releases
 
-`main` only moves via a release — never push or merge feature work into it directly. Releases are automated via `.github/workflows/release.yml`, which triggers on version tags (`v*.*.*`) regardless of branch, but tags should always be cut from `main`.
+`main` only moves via a release — never push or merge feature work into it directly. Releases run through `.github/workflows/release.yml`, which is **manual only**: pushing a tag publishes nothing. A maintainer starts it by hand, from a version tag (`v*.*.*`) that should always be cut from `main`.
 
 To publish a new version:
 
@@ -236,7 +236,9 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-The workflow will automatically:
+5. When you are ready to publish, start the release yourself: on GitHub open **Actions → Release → Run workflow**, choose the tag (`v0.2.0`) under **Use workflow from**, and run it. From the command line: `gh workflow run release.yml --ref v0.2.0`.
+
+The workflow will then:
 
 - Run tests and build
 - Publish `packages/core` to npm (requires `NODE_AUTH_TOKEN` secret set in repository settings)
