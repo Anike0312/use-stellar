@@ -1,5 +1,5 @@
 import { TransactionBuilder, Operation, Asset as StellarAsset } from "@stellar/stellar-sdk"
-import { getHorizonServer, isBrowser, isIssuedAsset } from "../utils"
+import { getHorizonServer, canSignTransactions, isIssuedAsset } from "../utils"
 import { asFeeSource, resolveFee } from "../utils/fees"
 import { getWalletAdapter } from "../wallets"
 import { createStellarError, toStellarError, toSubmissionError } from "../errors"
@@ -80,11 +80,11 @@ export async function addTrustline(
     throw markPreflight(createStellarError("WALLET_NOT_CONNECTED", "No wallet adapter selected."))
   }
 
-  if (!isBrowser()) {
+  if (!canSignTransactions()) {
     throw markPreflight(
       createStellarError(
         "VALIDATION_ERROR",
-        "Transaction signing is only available in the browser. " +
+        "Transaction signing is only available in the browser or React Native. " +
           'Move your component to a "use client" boundary in Next.js / Remix.'
       )
     )

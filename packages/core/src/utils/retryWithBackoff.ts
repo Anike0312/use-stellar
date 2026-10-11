@@ -41,17 +41,36 @@ export function isRetriable(error: unknown, retryOn5xx = false): boolean {
 }
 
 /**
+ * Returns the HTTP response attached to an error, if any.
+ *
+ * Horizon / axios attach it under `error.response`. The query fetchers in
+ * `queries/*` throw a normalized `StellarError` instead, which keeps the
+ * original error under `.raw` — look there too, otherwise a normalized 429
+ * carries no status or `Retry-After` and is never retried.
+ */
+function getErrorResponse(error: unknown): object | null {
+  if (!error || typeof error !== "object") return null
+
+  const response = (error as { response?: unknown }).response
+  if (response && typeof response === "object") return response
+
+  const raw = (error as { raw?: unknown }).raw
+  if (raw && typeof raw === "object") {
+    const rawResponse = (raw as { response?: unknown }).response
+    if (rawResponse && typeof rawResponse === "object") return rawResponse
+  }
+  return null
+}
+
+/**
  * Read the `Retry-After` header from a 429 error, if present.
  * Returns the number of **milliseconds** to wait, or `null` if unavailable.
  *
  * Horizon sends an integer number of seconds in `Retry-After`.
  */
 export function getRetryAfterMs(error: unknown): number | null {
-  if (!error || typeof error !== "object") return null
-
-  // Horizon / axios attach the response under `error.response`
-  const response = (error as { response?: unknown }).response
-  if (!response || typeof response !== "object") return null
+  const response = getErrorResponse(error)
+  if (!response) return null
 
   const headers = (response as { headers?: unknown }).headers
   if (!headers || typeof headers !== "object") return null
@@ -71,9 +90,8 @@ export function getRetryAfterMs(error: unknown): number | null {
  * Extract the HTTP status code from an Axios/Horizon-style error object.
  */
 export function getErrorStatus(error: unknown): number | undefined {
-  if (!error || typeof error !== "object") return undefined
-  const response = (error as { response?: unknown }).response
-  if (!response || typeof response !== "object") return undefined
+  const response = getErrorResponse(error)
+  if (!response) return undefined
   const status = (response as { status?: unknown }).status
   if (typeof status === "number") return status
   // Horizon sometimes puts the status in data.status (problem details)

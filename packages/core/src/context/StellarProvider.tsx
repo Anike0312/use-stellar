@@ -227,6 +227,12 @@ export function StellarProvider({
     [autoConnectEnabled, autoConnectPersistAddress, autoConnectStorage]
   )
 
+  // Detected once per provider. It is part of the context value, and hooks
+  // list it as a dependency (`useWallet`'s `connect`), so a fresh object per
+  // wallet update would give `connect` a new identity every time the wallet
+  // state changes — and re-fire any effect that depends on it.
+  const [platform] = useState(detectPlatform)
+
   // Memoized, not rebuilt per render. A fresh object literal here is a new
   // context value on every provider render, which re-renders every consumer in
   // the tree — including ones whose own inputs did not change.
@@ -238,9 +244,9 @@ export function StellarProvider({
       setWallet,
       autoConnect: resolvedAutoConnect,
       queryStore,
-      platform: detectPlatform(),
+      platform,
     }),
-    [network, resolvedNetworkConfig, wallet, resolvedAutoConnect, queryStore]
+    [network, resolvedNetworkConfig, wallet, resolvedAutoConnect, queryStore, platform]
   )
 
   return <StellarContext.Provider value={value}>{children}</StellarContext.Provider>

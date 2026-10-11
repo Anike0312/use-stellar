@@ -19,6 +19,18 @@ export interface UseWalletReturn extends WalletState {
   restoredWallet: WalletType | null
 }
 
+const DISCONNECTED_WALLET: WalletState = {
+  connected: false,
+  connecting: false,
+  address: null,
+  network: null,
+  wallet: null,
+  walletName: null,
+  error: null,
+  walletNetwork: null,
+  walletNetworkPassphrase: null,
+}
+
 async function resolveWalletNetwork(
   adapter: WalletAdapter,
   network: StellarNetwork
@@ -154,17 +166,7 @@ export function useWallet(): UseWalletReturn {
     setRestoredWallet(null)
     void writeWalletSession(autoConnect.storage, null)
 
-    safeSetWallet({
-      connected: false,
-      connecting: false,
-      address: null,
-      network: null,
-      wallet: null,
-      walletName: null,
-      error: null,
-      walletNetwork: null,
-      walletNetworkPassphrase: null,
-    })
+    safeSetWallet(DISCONNECTED_WALLET)
   }, [safeSetWallet, wallet.wallet, autoConnect.storage])
 
   const refreshWalletNetwork = useCallback(async () => {
@@ -250,7 +252,9 @@ export function useWallet(): UseWalletReturn {
   // Subscribes through the adapter contract. Adapters that cannot report
   // changes omit `subscribe`, so nothing here branches on wallet type.
   useEffect(() => {
-    if (!wallet.connected || !wallet.wallet || !platform.hasDom) return
+    // Gated on "not a server render" rather than on having a DOM: a native app
+    // has no DOM, but its WalletConnect sessions still report changes.
+    if (!wallet.connected || !wallet.wallet || platform.isServer) return
 
     let adapter: WalletAdapter
     try {
@@ -263,6 +267,15 @@ export function useWallet(): UseWalletReturn {
 
     const handleChange = (change: WalletChange) => {
       if (!mountedRef.current) return
+
+      if (change.disconnected) {
+        // The wallet ended the session; mirror `disconnect()` without calling
+        // back into the adapter, which has nothing left to close.
+        setRestoredWallet(null)
+        void writeWalletSession(autoConnect.storage, null)
+        safeSetWallet(DISCONNECTED_WALLET)
+        return
+      }
 
       safeSetWallet(prev => {
         if (!prev.connected) return prev
@@ -281,7 +294,7 @@ export function useWallet(): UseWalletReturn {
     return () => {
       unsubscribe()
     }
-  }, [wallet.connected, wallet.wallet, safeSetWallet, platform.hasDom])
+  }, [wallet.connected, wallet.wallet, safeSetWallet, platform.isServer, autoConnect.storage])
 
   const isNetworkMismatch = useMemo(() => {
     if (!wallet.connected || !wallet.walletNetwork) return false

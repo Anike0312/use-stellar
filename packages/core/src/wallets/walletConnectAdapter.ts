@@ -61,8 +61,14 @@ async function loadSignClient(
   if (!signClientPromise) {
     signClientPromise = (async () => {
       try {
-        // @ts-expect-error -- optional peer dependency, absent from this repo's install
-        const { SignClient } = await import("@walletconnect/sign-client")
+        // Optional peer dependency: it may or may not be installed where this
+        // is compiled, so the module is typed here rather than by its own
+        // declarations (`@ts-ignore`, not `@ts-expect-error`, for that reason).
+        // The specifier stays a literal so bundlers can resolve it.
+        // @ts-ignore
+        const { SignClient } = (await import("@walletconnect/sign-client")) as unknown as {
+          SignClient: { init: (options: Record<string, unknown>) => Promise<unknown> }
+        }
         const client = await SignClient.init({
           projectId,
           metadata,
@@ -71,6 +77,9 @@ async function loadSignClient(
         signClientResolved = client as unknown as SignClient
         return client as unknown as SignClient
       } catch {
+        // Do not cache the failure: a relay hiccup during init would otherwise
+        // break WalletConnect until the page is reloaded.
+        signClientPromise = null
         throw new WalletAdapterError(
           "wallet_unavailable",
           "WalletConnect SignClient failed to load. Is @walletconnect/sign-client installed?"
@@ -98,6 +107,31 @@ function getPassphraseFromChainId(chainId: string): string {
   if (chainId === "stellar:pubnet") return NETWORK_PASSPHRASES.mainnet
   if (chainId === "stellar:testnet") return NETWORK_PASSPHRASES.testnet
   return ""
+}
+
+/** CAIP-10 accounts (`stellar:<chain>:<address>`) a session approved. */
+function getSessionAccounts(session: SessionStruct): string[] {
+  return session.namespaces.stellar?.accounts || []
+}
+
+/**
+ * The newest session that approved an account on `chainId` — optionally a
+ * specific `address`. Sessions from earlier pairings can linger in the client's
+ * storage, so "the last one" is not necessarily the one the app is using.
+ */
+function findSession(
+  client: SignClient,
+  chainId: string,
+  address?: string
+): { session: SessionStruct; address: string } | null {
+  const sessions = client.session.values
+  for (let i = sessions.length - 1; i >= 0; i--) {
+    const account = getSessionAccounts(sessions[i]).find(
+      a => a.startsWith(chainId + ":") && (!address || a.split(":")[2] === address)
+    )
+    if (account) return { session: sessions[i], address: account.split(":")[2] }
+  }
+  return null
 }
 
 export interface CreateWalletConnectAdapterOptions {
@@ -133,6 +167,19 @@ export function createWalletConnectAdapter({
     async connect(network) {
       const client = await loadSignClient(projectId, metadata, storage)
       const chainId = getStellarChainId(network)
+
+      // An approved session for this network is reused, not re-paired. This is
+      // what makes `canAutoConnect()` true: restoring a session must not put a
+      // QR code / wallet prompt in front of the user on every page load.
+      const existing = findSession(client, chainId)
+      if (existing) {
+        return {
+          address: existing.address,
+          wallet: "walletconnect",
+          network,
+          networkPassphrase: getNetworkPassphrase(network) || "",
+        }
+      }
 
       const requiredNamespaces = {
         stellar: {
@@ -174,6 +221,28 @@ export function createWalletConnectAdapter({
         if (err instanceof WalletAdapterError) throw err
         throw new WalletAdapterError("wallet_unavailable", message || "Connection failed")
       }
+    },
+
+    async disconnect() {
+      // Only an already-loaded client can hold sessions; never load the SDK
+      // just to disconnect.
+      const client = signClientResolved
+      if (!client) return
+
+      await Promise.all(
+        client.session.values
+          .filter(session => getSessionAccounts(session).length > 0)
+          .map(session =>
+            client
+              .disconnect({
+                topic: session.topic,
+                reason: { code: 6000, message: "User disconnected." },
+              })
+              // The peer may already be gone; the local session is dropped
+              // either way.
+              .catch(() => {})
+          )
+      )
     },
 
     async getNetworkDetails(network) {
@@ -237,6 +306,7 @@ export function createWalletConnectAdapter({
           address: null,
           network: "custom",
           networkPassphrase: "",
+          disconnected: true,
         })
       }
 
@@ -263,10 +333,19 @@ export function createWalletConnectAdapter({
       const sessions = client.session.values
       if (!sessions.length) throw new WalletAdapterError("wallet_unavailable", "No active session")
 
-      const session = sessions[sessions.length - 1]
-
       const networkId = resolveNetworkFromPassphrase(options.networkPassphrase)
       const chainId = getStellarChainId(networkId)
+
+      // Sign with the session that approved this account on this network, not
+      // whichever session happens to be newest.
+      const match = findSession(client, chainId, options.address)
+      if (!match) {
+        throw new WalletAdapterError(
+          "wallet_network_mismatch",
+          "No WalletConnect session has approved this account on the requested network."
+        )
+      }
+      const session = match.session
 
       try {
         const response = await client.request({

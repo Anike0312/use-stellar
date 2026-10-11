@@ -7,6 +7,29 @@ export {
 } from "./context/StellarProvider"
 export type { StellarProviderProps, QueryConfig } from "./context/StellarProvider"
 
+// ── Runtime (framework-neutral) ────────────────────────────────────────────
+// Kept in step with `index.ts`: this entry is what Metro resolves for
+// `use-stellar`, so anything missing here does not exist for a native app.
+// The one intended difference is the browser-extension wallet adapters.
+export { createStellarRuntime } from "./runtime/StellarRuntime"
+export type {
+  StellarRuntime,
+  StellarRuntimeOptions,
+  StellarRuntimeSnapshot,
+  StellarRuntimeListener,
+} from "./runtime/StellarRuntime"
+export {
+  readWalletSession,
+  writeWalletSession,
+  clearWalletSession,
+  getWalletSessionStorage,
+  WALLET_SESSION_STORAGE_KEY as WALLET_SESSION_KEY,
+} from "./runtime/walletSession"
+export type { PersistedWalletSession, WalletSessionStorage } from "./runtime/walletSession"
+export { resolveNetworkConfig } from "./runtime/network"
+export { useStreamPayments } from "./hooks/useStreamPayments"
+export type { UseStreamPaymentsOptions, UseStreamPaymentsReturn } from "./types"
+
 // ── Hooks ──────────────────────────────────────────────────────────────────
 export * from "./hooks/useSorobanWrite"
 export type { SorobanInvokeOptions, UseSorobanWriteReturn } from "./types"

@@ -62,6 +62,12 @@ export interface WalletChange {
   address: string | null
   network: WalletNetworkId
   networkPassphrase: string
+  /**
+   * `true` when the wallet ended the session itself (for example the user
+   * removed the pairing in a WalletConnect wallet). The app is then no longer
+   * connected, which a `null` address alone does not say.
+   */
+  disconnected?: boolean
 }
 
 export interface WalletAdapter {

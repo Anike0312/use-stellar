@@ -93,6 +93,31 @@ export interface QueryObserver<T> {
 }
 
 /**
+ * Returns the snapshot an observer for these options would report right after
+ * starting, without creating one: no subscription, no request, no store write.
+ *
+ * Framework adapters use it for the render that happens before the observer
+ * exists (a React render must stay pure; the observer is created in an
+ * effect), so a query that is about to fetch already reads as `loading`.
+ */
+export function peekQuerySnapshot<T>(options: QueryObserverOptions<T>): QueryObserverSnapshot<T> {
+  const { store, queryKey } = options
+  const enabled = options.enabled ?? true
+  const entry = store.getSnapshot<T>(queryKey)
+  const willFetch =
+    enabled &&
+    !store.isFresh(queryKey, options.staleTime ?? DEFAULT_STALE_TIME) &&
+    onlineManager.isOnline()
+
+  return {
+    data: entry?.data ?? null,
+    loading: enabled ? (entry?.loading ?? false) || willFetch : false,
+    error: entry?.error ?? null,
+    updatedAt: entry?.updatedAt ?? null,
+  }
+}
+
+/**
  * Creates a framework-neutral query observer.
  *
  * Behaviour (extracted verbatim from `useQuery`):
@@ -310,6 +335,9 @@ export function createQueryObserver<T>(options: QueryObserverOptions<T>): QueryO
     // Same key: only enabled/disabled transitions (or fn/staleTime/maxRetries
     // changes) need handling.
     if (!enabled) {
+      // Already disabled on this key: nothing changed, and emitting here would
+      // notify on every call — adapters hand over their options every render.
+      if (!wasEnabled) return
       unsubscribeFromStore()
       projectDisabledSnapshot()
       return

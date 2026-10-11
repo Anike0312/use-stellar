@@ -1,6 +1,6 @@
 {
   "name": "use-stellar",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "type": "commonjs",
   "description": "React hooks for the Stellar network - the wagmi of Stellar",
   "repository": {
@@ -15,6 +15,13 @@
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "core": [
+        "./dist/core.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "react-native": {
@@ -49,7 +56,10 @@
   "engines": {
     "node": ">=20"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/index.mjs"
+  ],
   "publishConfig": {
     "access": "public"
   },
@@ -69,7 +79,8 @@
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0",
     "@albedo-link/intent": "^0.13.0",
-    "@stellar/freighter-api": "^6.0.0"
+    "@stellar/freighter-api": "^6.0.0",
+    "@walletconnect/sign-client": "^2.0.0"
   },
   "peerDependenciesMeta": {
     "react-dom": {
@@ -79,6 +90,9 @@
       "optional": true
     },
     "@stellar/freighter-api": {
+      "optional": true
+    },
+    "@walletconnect/sign-client": {
       "optional": true
     }
   },
@@ -112,7 +126,7 @@
     {
       "name": "CommonJS bundle",
       "path": "dist/index.js",
-      "limit": "25 kB",
+      "limit": "26 kB",
       "ignore": [
         "@stellar/stellar-sdk"
       ]
@@ -120,7 +134,7 @@
     {
       "name": "ES module bundle",
       "path": "dist/index.mjs",
-      "limit": "25 kB",
+      "limit": "26 kB",
       "ignore": [
         "@stellar/stellar-sdk"
       ]

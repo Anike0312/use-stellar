@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { QueryStore } from "./store"
 import { serializeKey } from "./keys"
-import { createQueryObserver, type QueryObserver, type QueryObserverSnapshot } from "./observer"
+import {
+  createQueryObserver,
+  peekQuerySnapshot,
+  type QueryObserver,
+  type QueryObserverSnapshot,
+} from "./observer"
 
 /**
  * Options for `useQuery`.
@@ -73,25 +78,18 @@ export function useQuery<T>({
 }: UseQueryOptions<T>): UseQueryResult<T> {
   const keyStr = serializeKey(queryKey)
 
-  // The observer is created lazily on first render and swapped only when the
-  // store changes (which never happens across the observer's lifetime in
-  // practice, but is handled for completeness). Key/fn/staleTime/enabled
-  // changes are routed through setOptions rather than recreating the
-  // observer, so subscriptions never leak across a key switch.
-  const observerRef = useRef<QueryObserver<T> | null>(null)
-  if (observerRef.current === null) {
-    observerRef.current = createQueryObserver<T>({
-      queryKey,
-      queryFn,
-      store,
-      staleTime,
-      enabled,
-      maxRetries,
-    })
-  }
+  // The latest render's options, read by the effects below without making
+  // them re-run for a new `queryFn` identity.
+  const optionsRef = useRef({ queryKey, queryFn, staleTime, enabled, maxRetries })
+  optionsRef.current = { queryKey, queryFn, staleTime, enabled, maxRetries }
 
+  const observerRef = useRef<QueryObserver<T> | null>(null)
+
+  // Render stays pure: the observer subscribes to the store and starts a
+  // request as soon as it is constructed, so it is created in an effect, not
+  // here. Until then, report what it is about to report.
   const [snapshot, setSnapshot] = useState<QueryObserverSnapshot<T>>(() =>
-    observerRef.current!.getSnapshot()
+    peekQuerySnapshot<T>({ queryKey, queryFn, store, staleTime, enabled, maxRetries })
   )
 
   // rateLimitedUntilRef mirrors the observer's rate-limit window. Stored as a
@@ -99,43 +97,47 @@ export function useQuery<T>({
   // triggering re-renders and without act() issues in tests.
   const rateLimitedUntilRef = useRef<number | null>(null)
 
-  // Keep the observer's configuration in sync with the latest render's
-  // options. This is where key switching, enabling/disabling, and store
-  // changes are applied — atomically, via the observer's own setOptions.
+  // The observer lives exactly as long as this effect: created and subscribed
+  // on mount, destroyed on unmount. A destroyed observer is never reused, so
+  // StrictMode's mount → unmount → mount gets a fresh one the second time
+  // (which joins the first one's in-flight request through the store).
   useEffect(() => {
-    observerRef.current!.setOptions({ queryKey, queryFn, staleTime, enabled, maxRetries })
-    setSnapshot(observerRef.current!.getSnapshot())
-    rateLimitedUntilRef.current = observerRef.current!.getRateLimitedUntil()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyStr, store, enabled])
+    const observer = createQueryObserver<T>({ ...optionsRef.current, store })
+    observerRef.current = observer
 
-  // Subscribe once (per observer instance) for change notifications.
-  useEffect(() => {
-    const observer = observerRef.current!
-    const unsubscribe = observer.subscribe(next => {
+    const sync = (next: QueryObserverSnapshot<T>) => {
       setSnapshot(next)
       rateLimitedUntilRef.current = observer.getRateLimitedUntil()
-    })
-    // Sync in case setOptions above ran before this subscription existed.
-    setSnapshot(observer.getSnapshot())
-    rateLimitedUntilRef.current = observer.getRateLimitedUntil()
+    }
+    const unsubscribe = observer.subscribe(sync)
+    sync(observer.getSnapshot())
 
     return () => {
       unsubscribe()
+      observer.destroy()
+      if (observerRef.current === observer) observerRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store])
+
+  // Hand the observer every render's options, so it always calls the current
+  // `queryFn` (which may close over values that are not part of the key) with
+  // the current `staleTime` / `maxRetries`. Key and enabled changes are
+  // applied here too — atomically, via the observer's own setOptions.
+  useEffect(() => {
+    observerRef.current?.setOptions(optionsRef.current)
+  })
+
+  // A key or enabled switch may not produce a store notification (fresh cached
+  // data, or disabled), so project the observer's snapshot explicitly.
+  useEffect(() => {
+    const observer = observerRef.current
+    if (!observer) return
+    setSnapshot(observer.getSnapshot())
+    rateLimitedUntilRef.current = observer.getRateLimitedUntil()
   }, [keyStr, store, enabled])
 
-  // Destroy the observer only when the hook instance unmounts for good.
-  useEffect(() => {
-    return () => {
-      observerRef.current?.destroy()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   const refetch = useCallback(() => {
-    void observerRef.current!.fetch({ force: true })
+    void observerRef.current?.fetch({ force: true })
   }, [])
 
   return {

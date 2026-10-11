@@ -119,6 +119,11 @@ export class OnlineManager {
   private detach(): void {
     if (typeof this.cleanup === "function") this.cleanup()
     this.cleanup = undefined
+    // Nothing is listening for changes any more, so the last reported state
+    // can go stale: going offline, unmounting every query, then reconnecting
+    // would otherwise leave `isOnline()` false forever. Drop it and fall back
+    // to the platform's own answer until a signal is attached again.
+    this.online = undefined
   }
 }
 

@@ -166,12 +166,18 @@ console.log('TypeScript core import and types resolution OK. Address valid:', is
   // `bundler` and `node16` do consult it, and `node16` is the strict one: it is
   // what surfaces a CJS declaration file being served for the `import`
   // condition ("masquerading as CJS").
+  //
+  // `--skipLibCheck` because this step verifies that OUR entry points and types
+  // resolve from a consumer's file, not that every transitive `.d.ts` is
+  // self-contained: @stellar/stellar-sdk's declarations reference `URI` and
+  // `json-schema` without depending on their @types packages, so a full lib
+  // check fails in any clean install regardless of what we ship.
   for (const moduleResolution of ['node', 'bundler', 'node16']) {
     // node16 resolution requires a matching `module` setting.
     const moduleFlag = moduleResolution === 'node16' ? '--module node16' : '--module esnext';
     console.log(`  - moduleResolution: ${moduleResolution}`);
     execSync(
-      `npx tsc --noEmit --target es2020 ${moduleFlag} --moduleResolution ${moduleResolution} test-ts-root.ts`,
+      `npx tsc --noEmit --skipLibCheck --target es2020 ${moduleFlag} --moduleResolution ${moduleResolution} test-ts-root.ts`,
       { cwd: tempDir, stdio: 'inherit' }
     );
   }
@@ -182,24 +188,33 @@ console.log('TypeScript core import and types resolution OK. Address valid:', is
     const moduleFlag = moduleResolution === 'node16' ? '--module node16' : '--module esnext';
     console.log(`  - moduleResolution: ${moduleResolution}`);
     execSync(
-      `npx tsc --noEmit --target es2020 ${moduleFlag} --moduleResolution ${moduleResolution} test-ts-core.ts`,
+      `npx tsc --noEmit --skipLibCheck --target es2020 ${moduleFlag} --moduleResolution ${moduleResolution} test-ts-core.ts`,
       { cwd: tempDir, stdio: 'inherit' }
     );
   }
 
-  // 17. Verify the "use client" directive is emitted in both root and core files in the packed tarball
+  // 17. Verify the "use client" directive in the packed tarball: required on
+  // the React entries (Next.js App Router), and absent from the React-free
+  // `core` entry — a "use client" module cannot be called from a server
+  // component, which is exactly what `use-stellar/core` is for.
   console.log(`\n11. Verifying "use client" directive in packed tarball...`);
   const packedDistDir = path.join(tempDir, 'node_modules', 'use-stellar', 'dist');
-  const filesToCheck = ['index.js', 'index.mjs', 'core.js', 'core.mjs'];
-  for (const file of filesToCheck) {
+  const directiveExpectations = {
+    'index.js': true,
+    'index.mjs': true,
+    'core.js': false,
+    'core.mjs': false,
+  };
+  for (const [file, expected] of Object.entries(directiveExpectations)) {
     const filePath = path.join(packedDistDir, file);
     assert.ok(fs.existsSync(filePath), `Expected ${file} to exist in packed tarball at ${filePath}`);
     const firstLine = fs.readFileSync(filePath, 'utf8').split('\n')[0].trim();
-    assert.ok(
+    assert.strictEqual(
       firstLine.startsWith('"use client"'),
-      `Expected ${file} in packed tarball to begin with "use client" directive, but got: ${firstLine}`
+      expected,
+      `Expected ${file} in packed tarball to ${expected ? 'begin' : 'NOT begin'} with "use client", but got: ${firstLine}`
     );
-    console.log(`  ✓ ${file} begins with "use client"`);
+    console.log(`  ✓ ${file} ${expected ? 'begins with' : 'has no'} "use client"`);
   }
 
   // 18. Verify core declaration files exist

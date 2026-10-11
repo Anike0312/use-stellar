@@ -1,5 +1,5 @@
 import { TransactionBuilder, Operation, Asset as StellarAsset, Memo } from "@stellar/stellar-sdk"
-import { getHorizonServer, isNativeAsset, isIssuedAsset, isBrowser } from "../utils"
+import { getHorizonServer, isNativeAsset, isIssuedAsset, canSignTransactions } from "../utils"
 import { asFeeSource, resolveFee } from "../utils/fees"
 import { getWalletAdapter } from "../wallets"
 import {
@@ -149,11 +149,11 @@ export async function sendPayment(
     throw markPreflight(new Error("No wallet adapter selected. Call connect() first."))
   }
 
-  if (!isBrowser()) {
+  if (!canSignTransactions()) {
     throw markPreflight(
       createStellarError(
         "VALIDATION_ERROR",
-        "Transaction signing is only available in the browser. " +
+        "Transaction signing is only available in the browser or React Native. " +
           'Move your component to a "use client" boundary in Next.js / Remix.'
       )
     )

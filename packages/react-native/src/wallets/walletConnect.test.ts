@@ -16,7 +16,7 @@ const mockClient = {
   connect: mockConnect,
   request: mockRequest,
   disconnect: jest.fn(),
-  session: { values: [mockSession], get: () => mockSession },
+  session: { values: [] as (typeof mockSession)[], get: () => mockSession },
   on: jest.fn(),
   removeListener: jest.fn(),
 }
@@ -43,20 +43,33 @@ function clientFor({
   response = { signedXDR: "signed-xdr" },
   connectError,
   requestError,
+  paired = false,
 }: {
   address?: string
   response?: unknown
   connectError?: Error
   requestError?: Error
+  /**
+   * Whether the client already holds an approved session. A fresh client does
+   * not — and one that does is reused by `connect()` instead of pairing again.
+   */
+  paired?: boolean
 } = {}) {
   mockSession.namespaces.stellar.accounts = [`stellar:testnet:${address}`]
+  mockClient.session.values = paired ? [mockSession] : []
   mockConnect.mockImplementation(
     async (params: { requiredNamespaces: { stellar: { chains: string[] } } }) => {
       if (connectError) throw connectError
       mockSession.namespaces.stellar.accounts = [
         `${params.requiredNamespaces.stellar.chains[0]}:${address}`,
       ]
-      return { uri: "wc:pairing-uri", approval: async () => mockSession }
+      return {
+        uri: "wc:pairing-uri",
+        approval: async () => {
+          mockClient.session.values = [mockSession]
+          return mockSession
+        },
+      }
     }
   )
   mockRequest.mockImplementation(async () => {
@@ -105,7 +118,7 @@ describe("React Native WalletConnect adapter", () => {
   })
 
   it("signs XDR through stellar_signXDR on the matching chain", async () => {
-    const { request } = clientFor()
+    const { request } = clientFor({ paired: true })
     const adapter = createReactNativeWalletConnectAdapter(options)
     await expect(
       adapter.signTransaction("unsigned-xdr", {
@@ -128,7 +141,7 @@ describe("React Native WalletConnect adapter", () => {
       code: "wallet_access_rejected",
     })
 
-    clientFor({ requestError: new Error("User rejected signing") })
+    clientFor({ paired: true, requestError: new Error("User rejected signing") })
     const rejectedSign = createReactNativeWalletConnectAdapter(options)
     await expect(
       rejectedSign.signTransaction("xdr", {
@@ -165,7 +178,7 @@ describe("React Native WalletConnect adapter", () => {
       code: "wallet_network_mismatch",
     })
 
-    clientFor({ requestError: new Error("relay failed") })
+    clientFor({ paired: true, requestError: new Error("relay failed") })
     await expect(
       adapter.signTransaction("xdr", {
         address: "GTESTADDRESS",

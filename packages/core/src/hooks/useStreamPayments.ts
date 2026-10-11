@@ -56,13 +56,12 @@ export function useStreamPayments({
   const closeRef = useRef<(() => void) | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cursorRef = useRef<string>(initialCursor)
-  const deliberateCloseRef = useRef(false)
   const attemptRef = useRef(0)
+  const streamIdRef = useRef<string | null>(null)
   const addressRef = useRef(resolvedAddress)
   addressRef.current = resolvedAddress
 
   const closeCurrent = useCallback(() => {
-    deliberateCloseRef.current = true
     if (reconnectTimerRef.current !== null) {
       clearTimeout(reconnectTimerRef.current)
       reconnectTimerRef.current = null
@@ -78,15 +77,28 @@ export function useStreamPayments({
     const currentAddress = addressRef.current
     if (!isBrowser() || !currentAddress) return
 
-    deliberateCloseRef.current = false
+    // Never two live streams: whatever is open (or waiting to reopen) goes
+    // first, otherwise every payment would be delivered once per stream.
+    closeCurrent()
+
+    // Tracked per stream rather than per hook, so a late event from a stream
+    // that was already replaced cannot be mistaken for the current one's.
+    let closed = false
+    let closeEventSource: (() => void) | null = null
+    const close = () => {
+      if (closed) return
+      closed = true
+      closeEventSource?.()
+    }
 
     const server = getHorizonServer(networkConfig)
-    const close = server
+    closeEventSource = server
       .payments()
       .forAccount(currentAddress)
       .cursor(cursorRef.current)
       .stream({
         onmessage: (record: unknown) => {
+          if (closed) return
           const normalized = normalizePayment(record as PaymentRecord, currentAddress)
           const pagingToken = (record as { paging_token?: string }).paging_token
           if (pagingToken) cursorRef.current = pagingToken
@@ -104,7 +116,13 @@ export function useStreamPayments({
           // also fires the stream's error event — that is not a failure, so it
           // must not surface as one, the same way a deliberate abort does not
           // set `error` elsewhere in this library.
-          if (deliberateCloseRef.current) return
+          if (closed) return
+
+          // The SDK's stream does not close on error — its EventSource keeps
+          // retrying by itself, from the cursor it was opened with. Close it,
+          // so the reconnect below replaces it instead of running beside it.
+          close()
+          if (closeRef.current === close) closeRef.current = null
 
           const delay = computeBackoffDelay(attemptRef.current)
           attemptRef.current += 1
@@ -144,6 +162,17 @@ export function useStreamPayments({
       closeCurrent()
       return
     }
+
+    // A different account or Horizon is a different stream: the buffered
+    // payments belong to the previous one, and its paging token means nothing
+    // on another network.
+    const streamId = `${networkConfig.horizonUrl}|${resolvedAddress}`
+    if (streamIdRef.current !== null && streamIdRef.current !== streamId) {
+      cursorRef.current = initialCursor
+      setState(INITIAL_STATE)
+    }
+    streamIdRef.current = streamId
+    attemptRef.current = 0
 
     openStream()
 
