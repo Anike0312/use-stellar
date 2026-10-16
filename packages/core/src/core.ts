@@ -65,6 +65,8 @@ export {
   registerWalletAdapter,
 } from "./wallets/registry"
 export type { RegisterWalletAdapterOptions } from "./wallets/registry"
+export { readWalletSession } from "./runtime/walletSession"
+export type { PersistedWalletSession, WalletSessionStorage } from "./runtime/walletSession"
 export { WalletAdapterError } from "./wallets/types"
 export type {
   SignTransactionOptions,
