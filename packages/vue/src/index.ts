@@ -13,6 +13,8 @@ export type { UseBalanceOptions, UseBalanceReturn, MaybeRefOrGetter } from "./us
 
 export { useSorobanContract, ANONYMOUS_SIMULATION_SOURCE } from "./useSorobanContract"
 export type { UseSorobanContractOptions, UseSorobanContractReturn } from "./useSorobanContract"
+export { useContractEvents } from "./useContractEvents"
+export type { UseContractEventsOptions, UseContractEventsReturn } from "./useContractEvents"
 
 export { VueQueryStore } from "./store"
 export type { QueryStoreConfig, QueryEntry, RunOptions } from "./store"
