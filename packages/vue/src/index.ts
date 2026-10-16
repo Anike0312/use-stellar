@@ -11,6 +11,10 @@ export type { StellarPluginOptions, StellarRuntime } from "./plugin"
 export { useBalance } from "./useBalance"
 export type { UseBalanceOptions, UseBalanceReturn, MaybeRefOrGetter } from "./useBalance"
 
+export { useAddTrustline } from "./useAddTrustline"
+export type { UseAddTrustlineReturn } from "./useAddTrustline"
+export type { AddTrustlineOptions } from "use-stellar/core"
+
 export { VueQueryStore } from "./store"
 export type { QueryStoreConfig, QueryEntry, RunOptions } from "./store"
 

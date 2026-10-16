@@ -29,6 +29,13 @@ export {
   tradesKey,
   serializeKey,
 } from "./cache/keys"
+export {
+  addTrustline,
+  AddTrustlineAbortedError,
+  isPreflightError as isAddTrustlinePreflightError,
+} from "./actions/addTrustline"
+export type { AddTrustlineRuntime } from "./actions/addTrustline"
+export { offlineError, onlineManager } from "./runtime/onlineManager"
 
 // ── Wallet Adapter ─────────────────────────────────────────────────────────
 export { freighterAdapter } from "./wallets/freighterAdapter"
@@ -116,6 +123,7 @@ export type {
   FeeUrgency,
   ContractSpecLike,
   ContractEvent,
+  AddTrustlineOptions,
 } from "./types"
 export { NETWORK_CONFIGS, getNetworkPassphrase } from "./types"
 export * from "./queries/account"
