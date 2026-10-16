@@ -29,6 +29,13 @@ export {
   tradesKey,
   serializeKey,
 } from "./cache/keys"
+export {
+  ANONYMOUS_SIMULATION_SOURCE,
+  argsKey,
+  isValidContractId,
+  simulateContractCall,
+} from "./queries/soroban"
+export type { SimulateContractCallOptions } from "./queries/soroban"
 
 // ── Wallet Adapter ─────────────────────────────────────────────────────────
 export { freighterAdapter } from "./wallets/freighterAdapter"
@@ -116,6 +123,7 @@ export type {
   FeeUrgency,
   ContractSpecLike,
   ContractEvent,
+  ContractCallOptions,
 } from "./types"
 export { NETWORK_CONFIGS, getNetworkPassphrase } from "./types"
 export * from "./queries/account"
