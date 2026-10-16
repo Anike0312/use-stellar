@@ -11,10 +11,13 @@ export type { StellarPluginOptions, StellarRuntime } from "./plugin"
 export { useBalance } from "./useBalance"
 export type { UseBalanceOptions, UseBalanceReturn, MaybeRefOrGetter } from "./useBalance"
 
+export { useClaimableBalance } from "./useClaimableBalance"
+export type { UseClaimableBalanceOptions, UseClaimableBalanceReturn } from "./useClaimableBalance"
+
 export { VueQueryStore } from "./store"
 export type { QueryStoreConfig, QueryEntry, RunOptions } from "./store"
 
-export { accountKey } from "./keys"
+export { accountKey, claimableBalanceKey, paymentsKey } from "./keys"
 
 export { NETWORK_CONFIGS } from "./types"
 export type { StellarNetwork, NetworkConfig, Asset, Balance } from "./types"

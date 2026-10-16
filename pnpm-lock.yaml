@@ -222,6 +222,9 @@ importers:
       '@stellar/stellar-sdk':
         specifier: ^12.0.0
         version: 12.3.0
+      use-stellar:
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@types/jest':
         specifier: ^29.5.0
