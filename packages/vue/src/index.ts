@@ -11,6 +11,9 @@ export type { StellarPluginOptions, StellarRuntime } from "./plugin"
 export { useBalance } from "./useBalance"
 export type { UseBalanceOptions, UseBalanceReturn, MaybeRefOrGetter } from "./useBalance"
 
+export { useSorobanContract, ANONYMOUS_SIMULATION_SOURCE } from "./useSorobanContract"
+export type { UseSorobanContractOptions, UseSorobanContractReturn } from "./useSorobanContract"
+
 export { VueQueryStore } from "./store"
 export type { QueryStoreConfig, QueryEntry, RunOptions } from "./store"
 
