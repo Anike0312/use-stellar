@@ -47,6 +47,9 @@ export type {
   ContractEventPollerOptions,
   ContractEventPollerSnapshot,
 } from "./runtime/contractEventPoller"
+export { isPreflightError, sendPayment, SendPaymentAbortedError } from "./actions/sendPayment"
+export type { SendPaymentRuntime } from "./actions/sendPayment"
+export { offlineError, onlineManager } from "./runtime/onlineManager"
 
 // ── Wallet Adapter ─────────────────────────────────────────────────────────
 export { freighterAdapter } from "./wallets/freighterAdapter"
@@ -127,6 +130,8 @@ export type {
   AccountInfo,
   TransactionResult,
   TransactionStatus,
+  SendPaymentOptions,
+  SendPaymentResult,
   WalletType,
   WalletNetworkId,
   WalletState,
