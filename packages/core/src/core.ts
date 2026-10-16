@@ -35,6 +35,8 @@ export {
   isPreflightError as isAddTrustlinePreflightError,
 } from "./actions/addTrustline"
 export type { AddTrustlineRuntime } from "./actions/addTrustline"
+export { pathPayment, isPathPaymentPreflightError } from "./actions/pathPayment"
+export type { PathPaymentRuntime } from "./actions/pathPayment"
 export { offlineError, onlineManager } from "./runtime/onlineManager"
 
 // ── Wallet Adapter ─────────────────────────────────────────────────────────
@@ -124,6 +126,7 @@ export type {
   ContractSpecLike,
   ContractEvent,
   AddTrustlineOptions,
+  PathPaymentOptions,
 } from "./types"
 export { NETWORK_CONFIGS, getNetworkPassphrase } from "./types"
 export * from "./queries/account"
