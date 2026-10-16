@@ -226,6 +226,15 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      '@size-limit/esbuild':
+        specifier: 12.1.0
+        version: 12.1.0(size-limit@12.1.0)
+      '@size-limit/esbuild-why':
+        specifier: 12.1.0
+        version: 12.1.0(size-limit@12.1.0)
+      '@size-limit/preset-small-lib':
+        specifier: ^12.1.0
+        version: 12.1.0(size-limit@12.1.0)
       '@types/jest':
         specifier: ^29.5.0
         version: 29.5.14
@@ -235,6 +244,9 @@ importers:
       jest:
         specifier: ^29.0.0
         version: 29.7.0(@types/node@20.19.43)
+      size-limit:
+        specifier: ^12.1.0
+        version: 12.1.0
       ts-jest:
         specifier: ^29.0.0
         version: 29.4.12(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(esbuild@0.27.7)(jest-util@29.7.0)(jest@29.7.0(@types/node@20.19.43))(typescript@5.9.3)
