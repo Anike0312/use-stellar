@@ -29,6 +29,17 @@ export {
   tradesKey,
   serializeKey,
 } from "./cache/keys"
+export {
+  createContractEventPoller,
+  DEFAULT_BUFFER_SIZE,
+  DEFAULT_POLL_INTERVAL,
+} from "./runtime/contractEventPoller"
+export type {
+  ContractEventPoller,
+  ContractEventPollerListener,
+  ContractEventPollerOptions,
+  ContractEventPollerSnapshot,
+} from "./runtime/contractEventPoller"
 
 // ── Wallet Adapter ─────────────────────────────────────────────────────────
 export { freighterAdapter } from "./wallets/freighterAdapter"
@@ -116,6 +127,7 @@ export type {
   FeeUrgency,
   ContractSpecLike,
   ContractEvent,
+  UseContractEventsOptions,
 } from "./types"
 export { NETWORK_CONFIGS, getNetworkPassphrase } from "./types"
 export * from "./queries/account"

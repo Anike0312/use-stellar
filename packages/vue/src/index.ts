@@ -11,6 +11,9 @@ export type { StellarPluginOptions, StellarRuntime } from "./plugin"
 export { useBalance } from "./useBalance"
 export type { UseBalanceOptions, UseBalanceReturn, MaybeRefOrGetter } from "./useBalance"
 
+export { useContractEvents } from "./useContractEvents"
+export type { UseContractEventsOptions, UseContractEventsReturn } from "./useContractEvents"
+
 export { VueQueryStore } from "./store"
 export type { QueryStoreConfig, QueryEntry, RunOptions } from "./store"
 
