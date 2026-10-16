@@ -14,6 +14,9 @@ export type { UseBalanceOptions, UseBalanceReturn, MaybeRefOrGetter } from "./us
 export { useClaimableBalance } from "./useClaimableBalance"
 export type { UseClaimableBalanceOptions, UseClaimableBalanceReturn } from "./useClaimableBalance"
 
+export { usePayments } from "./usePayments"
+export type { UsePaymentsOptions, UsePaymentsReturn } from "./usePayments"
+
 export { VueQueryStore } from "./store"
 export type { QueryStoreConfig, QueryEntry, RunOptions } from "./store"
 
