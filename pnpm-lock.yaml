@@ -229,15 +229,33 @@ importers:
       '@nuxt/kit':
         specifier: ^4.6.2
         version: 4.6.2(confbox@0.1.8)(magic-string@0.30.21)(mlly@1.8.2)
+      '@size-limit/esbuild':
+        specifier: 12.1.0
+        version: 12.1.0(size-limit@12.1.0)
+      '@size-limit/esbuild-why':
+        specifier: 12.1.0
+        version: 12.1.0(size-limit@12.1.0)
+      '@size-limit/preset-small-lib':
+        specifier: ^12.1.0
+        version: 12.1.0(size-limit@12.1.0)
       '@types/jest':
         specifier: ^29.5.0
         version: 29.5.14
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.43
+      '@vue/server-renderer':
+        specifier: ^3.5.0
+        version: 3.5.43
       jest:
         specifier: ^29.0.0
         version: 29.7.0(@types/node@20.19.43)
+      size-limit:
+        specifier: ^12.1.0
+        version: 12.1.0
+      jest-environment-jsdom:
+        specifier: ^29.0.0
+        version: 29.7.0
       ts-jest:
         specifier: ^29.0.0
         version: 29.4.12(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(esbuild@0.27.7)(jest-util@29.7.0)(jest@29.7.0(@types/node@20.19.43))(typescript@5.9.3)
