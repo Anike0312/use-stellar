@@ -11,6 +11,7 @@ export { createQueryObserver } from "./cache/observer"
 export type {
   QueryObserver,
   QueryObserverOptions,
+  QueryObserverSettableOptions,
   QueryObserverSnapshot,
   QueryObserverListener,
 } from "./cache/observer"
@@ -29,6 +30,15 @@ export {
   tradesKey,
   serializeKey,
 } from "./cache/keys"
+export {
+  addTrustline,
+  AddTrustlineAbortedError,
+  isPreflightError as isAddTrustlinePreflightError,
+} from "./actions/addTrustline"
+export type { AddTrustlineRuntime } from "./actions/addTrustline"
+export { pathPayment, isPathPaymentPreflightError } from "./actions/pathPayment"
+export type { PathPaymentRuntime } from "./actions/pathPayment"
+export { offlineError, onlineManager } from "./runtime/onlineManager"
 
 // ── Wallet Adapter ─────────────────────────────────────────────────────────
 export { freighterAdapter } from "./wallets/freighterAdapter"
@@ -107,6 +117,9 @@ export type {
   IssuedAsset,
   Balance,
   AccountInfo,
+  ClaimableBalance,
+  ClaimableBalanceClaimant,
+  NormalizedPayment,
   TransactionResult,
   TransactionStatus,
   WalletType,
@@ -116,10 +129,13 @@ export type {
   FeeUrgency,
   ContractSpecLike,
   ContractEvent,
+  AddTrustlineOptions,
+  PathPaymentOptions,
 } from "./types"
 export { NETWORK_CONFIGS, getNetworkPassphrase } from "./types"
 export * from "./queries/account"
 export * from "./queries/asset"
 export * from "./queries/claimableBalance"
 export * from "./queries/federation"
+export * from "./queries/payments"
 export * from "./queries/transaction"

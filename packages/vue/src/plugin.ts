@@ -1,7 +1,10 @@
 // packages/vue/src/plugin.ts
 
 import { inject, type App, type InjectionKey } from "vue"
+import type { WalletState } from "use-stellar/core"
 import { VueQueryStore, type QueryStoreConfig } from "./store"
+import { inject, shallowRef, type App, type InjectionKey, type Ref } from "vue"
+import { QueryStore, type QueryConfig } from "use-stellar/core"
 import { NETWORK_CONFIGS, type NetworkConfig, type StellarNetwork } from "./types"
 
 export interface StellarPluginOptions {
@@ -10,13 +13,20 @@ export interface StellarPluginOptions {
   /** Override the built-in Horizon/Soroban endpoints for `network`. Any field left out keeps the default. */
   networkConfig?: Partial<Pick<NetworkConfig, "horizonUrl" | "sorobanUrl" | "networkPassphrase">>
   /** Cache configuration shared by every composable. */
-  queryConfig?: QueryStoreConfig
+  queryConfig?: QueryConfig
+  /** Initial connected wallet address, primarily for restored client sessions. */
+  walletAddress?: string | null
 }
 
 export interface StellarRuntime {
   network: StellarNetwork
   networkConfig: NetworkConfig
   queryStore: VueQueryStore
+  wallet: WalletState
+  setWallet: (wallet: WalletState) => void
+  queryStore: QueryStore
+  walletAddress: Ref<string | null>
+  setWalletAddress: (address: string | null) => void
 }
 
 export const STELLAR_RUNTIME_KEY: InjectionKey<StellarRuntime> = Symbol("use-stellar/vue:runtime")
@@ -43,11 +53,34 @@ function resolveNetworkConfig(
  */
 export function createStellarRuntime(options: StellarPluginOptions = {}): StellarRuntime {
   const network = options.network ?? "testnet"
-  return {
+  const runtime: StellarRuntime = {
     network,
     networkConfig: resolveNetworkConfig(network, options.networkConfig),
     queryStore: new VueQueryStore(options.queryConfig),
+    wallet: {
+      connected: false,
+      connecting: false,
+      address: null,
+      network: null,
+      wallet: null,
+      walletName: null,
+      error: null,
+      walletNetwork: null,
+      walletNetworkPassphrase: null,
+    },
+    setWallet(wallet): void {
+      runtime.wallet = wallet
+  const walletAddress = shallowRef(options.walletAddress ?? null)
+  return {
+    network,
+    networkConfig: resolveNetworkConfig(network, options.networkConfig),
+    queryStore: new QueryStore(options.queryConfig),
+    walletAddress,
+    setWalletAddress(address: string | null): void {
+      walletAddress.value = address
+    },
   }
+  return runtime
 }
 
 /**
