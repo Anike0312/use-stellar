@@ -11,6 +11,7 @@ export { createQueryObserver } from "./cache/observer"
 export type {
   QueryObserver,
   QueryObserverOptions,
+  QueryObserverSettableOptions,
   QueryObserverSnapshot,
   QueryObserverListener,
 } from "./cache/observer"
@@ -29,6 +30,34 @@ export {
   tradesKey,
   serializeKey,
 } from "./cache/keys"
+export {
+  ANONYMOUS_SIMULATION_SOURCE,
+  argsKey,
+  isValidContractId,
+  simulateContractCall,
+} from "./queries/soroban"
+export type { SimulateContractCallOptions } from "./queries/soroban"
+export {
+  createContractEventPoller,
+  DEFAULT_BUFFER_SIZE,
+  DEFAULT_POLL_INTERVAL,
+} from "./runtime/contractEventPoller"
+export type {
+  ContractEventPoller,
+  ContractEventPollerListener,
+  ContractEventPollerOptions,
+  ContractEventPollerSnapshot,
+} from "./runtime/contractEventPoller"
+export { isPreflightError, sendPayment, SendPaymentAbortedError } from "./actions/sendPayment"
+export type { SendPaymentRuntime } from "./actions/sendPayment"
+  addTrustline,
+  AddTrustlineAbortedError,
+  isPreflightError as isAddTrustlinePreflightError,
+} from "./actions/addTrustline"
+export type { AddTrustlineRuntime } from "./actions/addTrustline"
+export { pathPayment, isPathPaymentPreflightError } from "./actions/pathPayment"
+export type { PathPaymentRuntime } from "./actions/pathPayment"
+export { offlineError, onlineManager } from "./runtime/onlineManager"
 
 // ── Wallet Adapter ─────────────────────────────────────────────────────────
 export { freighterAdapter } from "./wallets/freighterAdapter"
@@ -45,6 +74,8 @@ export {
   registerWalletAdapter,
 } from "./wallets/registry"
 export type { RegisterWalletAdapterOptions } from "./wallets/registry"
+export { readWalletSession } from "./runtime/walletSession"
+export type { PersistedWalletSession, WalletSessionStorage } from "./runtime/walletSession"
 export { WalletAdapterError } from "./wallets/types"
 export type {
   SignTransactionOptions,
@@ -108,8 +139,13 @@ export type {
   IssuedAsset,
   Balance,
   AccountInfo,
+  ClaimableBalance,
+  ClaimableBalanceClaimant,
+  NormalizedPayment,
   TransactionResult,
   TransactionStatus,
+  SendPaymentOptions,
+  SendPaymentResult,
   WalletType,
   WalletNetworkId,
   WalletState,
@@ -117,10 +153,15 @@ export type {
   FeeUrgency,
   ContractSpecLike,
   ContractEvent,
+  ContractCallOptions,
+  UseContractEventsOptions,
+  AddTrustlineOptions,
+  PathPaymentOptions,
 } from "./types"
 export { NETWORK_CONFIGS, getNetworkPassphrase } from "./types"
 export * from "./queries/account"
 export * from "./queries/asset"
 export * from "./queries/claimableBalance"
 export * from "./queries/federation"
+export * from "./queries/payments"
 export * from "./queries/transaction"

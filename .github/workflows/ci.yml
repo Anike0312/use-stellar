@@ -50,6 +50,9 @@ jobs:
         run: |
           pnpm test
           pnpm --filter @use-stellar/vue test
+      - name: Build core for framework adapters
+        run: pnpm --filter use-stellar build
+      - run: pnpm test
 
   build:
     name: Build SDK
